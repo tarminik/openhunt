@@ -12,9 +12,25 @@ CLI tool for automating job seeker actions on hh.ru.
 
 ## Tech Stack
 
-- Playwright for web automation
-- LLM integration for communication
-- TUI for interactive interface
+- **Python 3.12+** with **uv**
+- **Playwright** for browser automation
+- **Textual** for TUI
+- **Click** for CLI
+
+## Install
+
+```bash
+uv tool install openhunt
+```
+
+## Development
+
+```bash
+git clone https://github.com/tarminik/openhunt.git
+cd openhunt
+uv sync
+uv run openhunt --help
+```
 
 ## License
 
