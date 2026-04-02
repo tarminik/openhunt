@@ -23,3 +23,7 @@ RESPONSE_POPUP_LETTER_INPUT = "[data-qa='vacancy-response-popup-form-letter-inpu
 
 # --- Post-apply page (simple vacancies without popup) ---
 RESPONSE_LETTER_SUBMIT = "[data-qa='vacancy-response-letter-submit']"
+
+# --- Resume page (/applicant/resumes) ---
+RESUME_CARD = "[data-qa='resume']"
+RESUME_RAISE_BUTTON = "[data-qa~='resume-update-button']"

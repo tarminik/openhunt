@@ -50,6 +50,19 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str, 
 
 
 @main.group()
+def resume() -> None:
+    """Управление резюме."""
+
+
+@resume.command("raise")
+def resume_raise() -> None:
+    """Поднять резюме в поиске на hh.ru."""
+    from openhunt.browser.actions.resume import raise_resume
+
+    raise_resume()
+
+
+@main.group()
 def query() -> None:
     """Управление сохранёнными поисковыми запросами."""
 
