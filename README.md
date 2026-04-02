@@ -1,37 +1,100 @@
 # openhunt
 
-CLI tool for automating job seeker actions on hh.ru.
+CLI-инструмент для автоматизации поиска работы на hh.ru.
 
-## Features (planned)
+## Возможности
 
-- Apply to vacancies automatically
-- Generate cover letters with LLM
-- Fill out application forms
-- Chat with employers
-- TUI interface
+- Автоматические отклики на вакансии (по поисковому запросу или из рекомендаций)
+- Сохранение поисковых запросов для повторного использования
+- Сохранение сессии — авторизация один раз, дальше всё работает автоматически
 
-## Tech Stack
+### В планах
 
-- **Python 3.12+** with **uv**
-- **Playwright** for browser automation
-- **Textual** for TUI
-- **Click** for CLI
+- Генерация сопроводительных писем (LLM)
+- Автоматическое заполнение анкет работодателей
+- Общение с работодателями в чатах
+- TUI-интерфейс
+- Система памяти — openhunt учится на ваших ответах и со временем работает автономно
 
-## Install
+## Установка
+
+Требуется Python 3.12+ и [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv tool install openhunt
 ```
 
-## Development
+После установки нужно установить браузер для Playwright:
+
+```bash
+playwright install chromium
+```
+
+## Использование
+
+### Авторизация
+
+При первом запуске нужно авторизоваться на hh.ru. Откроется браузер — введите номер телефона, решите капчу и введите код из SMS:
+
+```bash
+openhunt login
+```
+
+Сессия сохраняется между запусками. Повторный логин нужен только когда сессия истечёт.
+
+### Отклики на вакансии
+
+Для откликов нужно указать ID резюме с hh.ru (можно найти в URL вашего резюме):
+
+```bash
+# По поисковому запросу
+openhunt apply --resume <id> --query "python developer"
+
+# С использованием языка запросов hh.ru
+openhunt apply --resume <id> --query "NAME:(python OR golang) AND NOT стажёр"
+
+# Из рекомендованных вакансий (на основе вашего резюме)
+openhunt apply --resume <id> --recommended
+
+# Ограничить количество откликов
+openhunt apply --resume <id> --query "backend python" --limit 20
+
+# По сохранённому запросу
+openhunt apply --resume <id> --saved backend
+```
+
+Автоматически пропускаются:
+- Вакансии, на которые вы уже откликались
+- Вакансии с обязательным сопроводительным письмом
+- Вакансии с обязательной анкетой
+
+Подробнее о языке поисковых запросов hh.ru: https://hh.ru/article/25295
+
+### Сохранённые запросы
+
+Сложные запросы можно сохранить и использовать по имени:
+
+```bash
+# Сохранить запрос
+openhunt query save backend "NAME:(python OR golang) AND NOT стажёр"
+
+# Список сохранённых запросов
+openhunt query list
+
+# Удалить запрос
+openhunt query delete backend
+```
+
+## Разработка
 
 ```bash
 git clone https://github.com/tarminik/openhunt.git
 cd openhunt
 uv sync
+playwright install chromium
 uv run openhunt --help
 ```
 
-## License
+## Лицензия
 
 MIT

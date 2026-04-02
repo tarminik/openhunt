@@ -10,13 +10,13 @@
 
 ### Job Search
 - Search by keywords and filters
-- Browse recommended vacancies
+- Browse recommended vacancies (https://hh.ru/?hhtmFrom=main — based on resume and past applications)
 - Save interesting vacancies
 - Custom filtering beyond hh.ru built-in filters (LLM-based relevance scoring)
 
 ### Applications
 - Simple apply (one button, no cover letter)
-- Apply with cover letter (LLM-generated)
+- Apply with cover letter (template or LLM-generated)
 - Fill employer questionnaires (each one is different — hardest to automate)
 - Mass apply to matching vacancies
 
@@ -42,34 +42,33 @@
 
 ## Phases
 
-### Phase 1: Foundation
-- [ ] Project setup, CI, linting
+### Phase 1: Foundation + First Automation (current)
+No LLM required — pure Playwright automation.
 - [ ] Persistent browser session (login once, reuse)
 - [ ] Anti-bot measures (delays, human-like behavior)
-- [ ] Basic CLI commands
+- [ ] `openhunt login` — interactive headed login
+- [ ] `openhunt apply` — auto-apply to vacancies without required cover letter/questionnaire
+  - By search query: `openhunt apply --query "python developer"`
+  - From recommended: `openhunt apply --recommended`
 
-### Phase 2: Quick Wins
+### Phase 2: More Automation
 - [ ] Raise resume (scheduled, periodic)
 - [ ] View application statuses
 - [ ] Read new messages
-- [ ] Simple apply to a vacancy by URL
+- [ ] Template-based cover letters (no LLM yet)
 
-### Phase 3: Core Automation
-- [ ] Search and filter vacancies
-- [ ] Mass apply with criteria
-- [ ] Cover letter generation (LLM)
+### Phase 3: LLM Integration
+- [ ] Cover letter generation (LLM, personalized per vacancy)
+- [ ] Auto-fill employer questionnaires (LLM)
+- [ ] Chat with employers (LLM-assisted)
+- [ ] Memory system (see docs/memory.md)
 
-### Phase 4: Communication
-- [ ] Classify incoming messages (invitation, rejection, question)
-- [ ] Auto-reply to standard messages (LLM-assisted)
-- [ ] Notification system
-
-### Phase 5: TUI
+### Phase 4: TUI
 - [ ] Interactive vacancy browser
 - [ ] Chat interface
 - [ ] Status dashboard
 
-### Phase 6: Intelligence
+### Phase 5: Intelligence
 - [ ] Custom relevance scoring (LLM matches vacancy to resume)
 - [ ] Resume tailoring per vacancy
 - [ ] Salary analysis
