@@ -68,14 +68,21 @@ No LLM required — pure Playwright automation.
 - [ ] Chat interface
 - [ ] Status dashboard
 
-### Phase 5: Intelligence
+### Phase 5: Analytics
+- [ ] Application logging (start collecting data ASAP — needed for all analytics)
+- [ ] Conversion stats: applied → viewed → invitation → rejection
+- [ ] Breakdown by query, vacancy type, company, salary range
+- [ ] Resume recommendations based on invitation/rejection patterns (LLM)
+- [ ] Visual stats dashboard (TUI or export)
+
+### Phase 6: Intelligence
 - [ ] Custom relevance scoring (LLM matches vacancy to resume)
 - [ ] Resume tailoring per vacancy
-- [ ] Salary analysis
 - [ ] Interview preparation assistant
+- [ ] Best time to apply analysis
+- [ ] Multi-resume A/B testing (which resume converts better)
 
 ## Ideas to Explore
 - Telegram bot integration for notifications
 - Multiple job site support (SuperJob, Habr Career, etc.)
-- Analytics dashboard (response rates, etc.)
-- Resume A/B testing
+- Market analysis (salary trends, skill demand)
