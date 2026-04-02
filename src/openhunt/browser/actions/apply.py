@@ -26,19 +26,50 @@ def _get_vacancy_links(page: Page) -> list[str]:
     return links
 
 
-def _check_next_page(page: Page, serp_url: str) -> bool:
-    """Navigate back to the SERP and check if there is a next page."""
-    page.goto(serp_url, wait_until="domcontentloaded")
-    human_delay(0.5, 1.0)
-    return page.query_selector(selectors.PAGER_NEXT) is not None
-
-
 def _dismiss_relocation_dialog(page: Page) -> None:
     """Handle the 'applying to a vacancy in another country' dialog if it appears."""
-    confirm = page.get_by_text("Все равно откликнуться")
+    confirm = page.get_by_text(selectors.RELOCATION_CONFIRM_TEXT)
     if confirm.count() > 0:
         confirm.first.click()
         human_delay(1.5, 2.5)
+
+
+def _select_resume_in_popup(page: Page, resume_id: str) -> None:
+    """Select the correct resume in the response popup if a resume selector is present.
+
+    When a user has multiple resumes, hh.ru may show a dropdown or clickable
+    items to pick which resume to attach.  Tries <select> first, then falls
+    back to clickable items scoped to the dialog.
+    """
+    dialog = page.query_selector("[role='dialog']")
+
+    # Try 1: <select> dropdown
+    select_el = page.query_selector(selectors.RESPONSE_POPUP_RESUME_SELECT)
+    if select_el:
+        options = select_el.query_selector_all("option")
+        for option in options:
+            value = option.get_attribute("value") or ""
+            if resume_id in value:
+                select_el.select_option(value=value)
+                human_delay(0.3, 0.6)
+                return
+
+    # Try 2: clickable items / radio buttons scoped to dialog
+    scope = dialog if dialog else page
+    resume_item = scope.query_selector(f"[data-qa*='{resume_id}']")
+    if resume_item:
+        resume_item.click()
+        human_delay(0.3, 0.6)
+        return
+
+    # No resume selector found at all — single-resume account, nothing to do
+    if not select_el and not dialog:
+        return
+
+    click.echo(
+        f"  ! Предупреждение: резюме {resume_id} не найдено в селекторе,"
+        " используется по умолчанию"
+    )
 
 
 def _try_apply(page: Page, vacancy_url: str, resume_id: str) -> str:
@@ -66,7 +97,7 @@ def _try_apply(page: Page, vacancy_url: str, resume_id: str) -> str:
         return "already_applied"
 
     btn_text = apply_btn.inner_text().strip()
-    if btn_text != "Откликнуться":
+    if btn_text != selectors.APPLY_BUTTON_TEXT:
         return "already_applied"
 
     apply_btn.click()
@@ -74,13 +105,15 @@ def _try_apply(page: Page, vacancy_url: str, resume_id: str) -> str:
 
     _dismiss_relocation_dialog(page)
 
+    _select_resume_in_popup(page, resume_id)
+
     # --- Flow 1: Simple apply (resume sent immediately, no popup) ---
     body = page.inner_text("body")
-    if "Резюме доставлено" in body or "Отклик отправлен" in body:
+    if selectors.RESPONSE_DELIVERED_TEXT in body or selectors.RESPONSE_SENT_TEXT in body:
         return "applied"
 
     # --- Flow 4: Questionnaire page ---
-    if "Ответьте на вопросы" in body or "ответить на несколько вопросов" in body:
+    if selectors.QUESTIONNAIRE_TEXT in body or selectors.QUESTIONNAIRE_ALT_TEXT in body:
         page.go_back()
         return "questionnaire"
 
@@ -91,7 +124,7 @@ def _try_apply(page: Page, vacancy_url: str, resume_id: str) -> str:
         dialog = page.query_selector("[role='dialog']")
         if dialog and dialog.is_visible():
             dialog_text = dialog.inner_text()
-            if "обязательн" in dialog_text.lower() and "сопроводительное" in dialog_text.lower():
+            if selectors.COVER_LETTER_REQUIRED_TEXT in dialog_text.lower() and selectors.COVER_LETTER_KEYWORD_TEXT in dialog_text.lower():
                 # Close the popup and skip
                 close_btn = page.query_selector(selectors.RESPONSE_POPUP_CLOSE)
                 if close_btn:
@@ -146,11 +179,12 @@ def apply_to_vacancies(
             page.goto(serp_url, wait_until="domcontentloaded")
             human_delay(1.0, 2.0)
 
-            # Collect all vacancy links before navigating away
+            # Collect all vacancy links and check for next page before navigating away
             vacancy_links = _get_vacancy_links(page)
             if not vacancy_links:
                 click.echo("Вакансий больше не найдено.")
                 break
+            has_next = page.query_selector(selectors.PAGER_NEXT) is not None
 
             for link in vacancy_links:
                 if applied >= limit:
@@ -179,9 +213,9 @@ def apply_to_vacancies(
             if applied >= limit:
                 break
 
-            # Check for next page: navigate back to SERP first
+            # Move to next page if available
             if not recommended:
-                if not _check_next_page(page, serp_url):
+                if not has_next:
                     click.echo("Достигнута последняя страница результатов.")
                     break
                 page_num += 1

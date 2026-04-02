@@ -29,6 +29,7 @@ def browser_context(headless: bool = True):
     """
     ensure_dirs()
     pw = sync_playwright().start()
+    context = None
     try:
         context = pw.chromium.launch_persistent_context(
             user_data_dir=str(BROWSER_DIR),
@@ -39,7 +40,8 @@ def browser_context(headless: bool = True):
         page = context.pages[0] if context.pages else context.new_page()
         yield context, page
     finally:
-        context.close()
+        if context is not None:
+            context.close()
         pw.stop()
 
 

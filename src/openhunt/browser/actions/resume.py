@@ -24,7 +24,7 @@ def raise_resume() -> None:
         buttons = page.query_selector_all(selectors.RESUME_RAISE_BUTTON)
         if not buttons:
             # No raise button — check if there's a cooldown message
-            cooldown = page.get_by_text("Поднять вручную можно")
+            cooldown = page.get_by_text(selectors.RESUME_COOLDOWN_TEXT)
             if cooldown.count() > 0:
                 text = cooldown.first.inner_text().strip().replace("\xa0", " ")
                 match = re.search(r"можно (.+)", text)
@@ -35,11 +35,16 @@ def raise_resume() -> None:
             return
 
         raised = 0
-        for btn in buttons:
-            text = btn.inner_text().strip()
-            if "Поднять в поиске" not in text:
-                continue
-
+        max_attempts = len(buttons)
+        for _ in range(max_attempts):
+            buttons = page.query_selector_all(selectors.RESUME_RAISE_BUTTON)
+            btn = None
+            for b in buttons:
+                if selectors.RESUME_RAISE_TEXT in b.inner_text().strip():
+                    btn = b
+                    break
+            if btn is None:
+                break
             btn.click()
             human_delay(1.5, 2.5)
             raised += 1
