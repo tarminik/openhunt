@@ -31,6 +31,9 @@ RESPONSE_LETTER_SUBMIT = "[data-qa='vacancy-response-letter-submit']"
 RESUME_CARD = "[data-qa='resume']"
 RESUME_RAISE_BUTTON = "[data-qa~='resume-update-button']"
 
+# --- Resume detail page (/resume/<id>) ---
+RESUME_CONTENT = "[data-qa='resume-block-container']"
+
 # --- UI text constants ---
 APPLY_BUTTON_TEXT = "Откликнуться"
 RESPONSE_DELIVERED_TEXT = "Резюме доставлено"

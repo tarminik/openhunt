@@ -110,6 +110,28 @@ def resume_set(resume_id: str) -> None:
     click.echo(f"Резюме сохранено: {resume_id.strip()}")
 
 
+@resume.command("sync")
+def resume_sync() -> None:
+    """Синхронизировать профиль резюме с hh.ru."""
+    from openhunt.browser.actions.profile import sync_resume_profile
+    from openhunt.browser.session import browser_context, check_auth
+    from openhunt.config import get_default_resume
+
+    resume_id = get_default_resume()
+    if not resume_id:
+        raise click.UsageError(
+            "Сначала сохраните ID резюме: openhunt resume set <ID>"
+        )
+
+    with browser_context(headless=True) as page:
+        if not check_auth(page):
+            click.echo("Сессия истекла. Выполните 'openhunt login' для авторизации.")
+            return
+
+        sync_resume_profile(page, resume_id)
+        click.echo("Профиль синхронизирован.")
+
+
 @resume.command("show")
 def resume_show() -> None:
     """Показать сохранённый ID резюме."""

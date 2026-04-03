@@ -12,8 +12,8 @@ PROVIDER_URLS = {
 SYSTEM_PROMPT = (
     "Ты — помощник соискателя. Напиши короткое сопроводительное письмо (2-3 предложения) "
     "на русском языке для отклика на вакансию. Письмо должно быть профессиональным, "
-    "конкретным и показывать интерес к позиции. Не используй шаблонные фразы вроде "
-    '"с большим интересом". Отвечай только текстом письма, без приветствия и подписи.'
+    "конкретным и показывать релевантность опыта соискателя позиции. Не используй шаблонные "
+    'фразы вроде "с большим интересом". Отвечай только текстом письма, без приветствия и подписи.'
 )
 
 _client: OpenAI | None = None
@@ -54,7 +54,9 @@ def _get_client() -> OpenAI | None:
         return None
 
 
-def generate_cover_letter(vacancy_title: str, vacancy_text: str) -> str | None:
+def generate_cover_letter(
+    vacancy_title: str, vacancy_text: str, profile_text: str = ""
+) -> str | None:
     """Generate a cover letter using the configured LLM provider.
 
     Returns the generated text, or None on any error (caller should fall back to template).
@@ -68,7 +70,11 @@ def generate_cover_letter(vacancy_title: str, vacancy_text: str) -> str | None:
         return None
 
     try:
-        user_message = f"Вакансия: {vacancy_title}\n\n{vacancy_text}"
+        parts = []
+        if profile_text:
+            parts.append(f"Профиль соискателя:\n{profile_text}")
+        parts.append(f"Вакансия: {vacancy_title}\n\n{vacancy_text}")
+        user_message = "\n\n".join(parts)
 
         response = client.chat.completions.create(
             model=llm_config["model"],
