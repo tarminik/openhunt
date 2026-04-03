@@ -10,7 +10,7 @@ from openhunt.browser.session import browser_context, check_auth, human_delay
 
 
 SEARCH_URL = "https://hh.ru/search/vacancy?text={query}&page={page}"
-RECOMMENDED_URL = "https://hh.ru/?hhtmFrom=main"
+RECOMMENDED_URL = "https://hh.ru/search/vacancy?resume={resume_id}&hhtmFrom=main&page={page}"
 
 
 def _get_vacancy_links(page: Page) -> list[str]:
@@ -24,6 +24,7 @@ def _get_vacancy_links(page: Page) -> list[str]:
                 href = f"https://hh.ru{href}"
             links.append(href)
     return links
+
 
 
 def _dismiss_relocation_dialog(page: Page) -> None:
@@ -170,9 +171,7 @@ def apply_to_vacancies(
         while applied < limit:
             # Build the listing URL
             if recommended:
-                if page_num > 0:
-                    break
-                serp_url = RECOMMENDED_URL
+                serp_url = RECOMMENDED_URL.format(resume_id=resume_id, page=page_num)
             else:
                 serp_url = SEARCH_URL.format(query=quote(query, safe=""), page=page_num)
 
@@ -213,15 +212,11 @@ def apply_to_vacancies(
             if applied >= limit:
                 break
 
-            # Move to next page if available
-            if not recommended:
-                if not has_next:
-                    click.echo("Достигнута последняя страница результатов.")
-                    break
-                page_num += 1
-                human_delay(1.0, 2.0)
-            else:
+            if not has_next:
+                click.echo("Достигнута последняя страница результатов.")
                 break
+            page_num += 1
+            human_delay(1.0, 2.0)
 
         # Report
         total_skipped = sum(skipped.values())

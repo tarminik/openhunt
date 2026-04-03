@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
+from pathlib import Path
 
 import click
 from playwright.sync_api import sync_playwright, BrowserContext, Page
@@ -17,13 +18,22 @@ BASE_URL = "https://hh.ru"
 LOGIN_URL = "https://hh.ru/account/login"
 
 
-def _install_chromium() -> None:
-    """Download and install Chromium for Playwright."""
+def _ensure_chromium(pw) -> None:
+    """Install Chromium if the executable is missing."""
+    executable = pw.chromium.executable_path
+    if Path(executable).exists():
+        return
     click.echo("Chromium не найден, устанавливаю...")
-    subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "chromium"],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        raise click.ClickException(
+            "Не удалось установить Chromium. Проверьте подключение к сети "
+            "и попробуйте вручную: playwright install chromium"
+        )
 
 
 def human_delay(min_sec: float = 1.0, max_sec: float = 3.0) -> None:
@@ -45,25 +55,13 @@ def browser_context(headless: bool = True):
     pw = sync_playwright().start()
     context = None
     try:
-        try:
-            context = pw.chromium.launch_persistent_context(
-                user_data_dir=str(BROWSER_DIR),
-                headless=headless,
-                viewport={"width": 1280, "height": 800},
-                locale="ru-RU",
-            )
-        except Exception as exc:
-            if "Executable doesn't exist" not in str(exc):
-                raise
-            pw.stop()
-            _install_chromium()
-            pw = sync_playwright().start()
-            context = pw.chromium.launch_persistent_context(
-                user_data_dir=str(BROWSER_DIR),
-                headless=headless,
-                viewport={"width": 1280, "height": 800},
-                locale="ru-RU",
-            )
+        _ensure_chromium(pw)
+        context = pw.chromium.launch_persistent_context(
+            user_data_dir=str(BROWSER_DIR),
+            headless=headless,
+            viewport={"width": 1280, "height": 800},
+            locale="ru-RU",
+        )
         page = context.pages[0] if context.pages else context.new_page()
         yield context, page
     finally:

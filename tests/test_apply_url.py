@@ -2,7 +2,7 @@
 
 from urllib.parse import quote
 
-from openhunt.browser.actions.apply import SEARCH_URL
+from openhunt.browser.actions.apply import SEARCH_URL, RECOMMENDED_URL
 
 
 def test_simple_query():
@@ -38,3 +38,18 @@ def test_pagination():
     for p in [0, 1, 5, 10]:
         url = SEARCH_URL.format(query=quote("test", safe=""), page=p)
         assert f"page={p}" in url
+
+
+def test_recommended_url():
+    resume_id = "abc123def456"
+    url = RECOMMENDED_URL.format(resume_id=resume_id, page=0)
+    assert f"resume={resume_id}" in url
+    assert "page=0" in url
+    assert "/search/vacancy?" in url
+
+
+def test_recommended_pagination():
+    for p in [0, 1, 5]:
+        url = RECOMMENDED_URL.format(resume_id="test_id", page=p)
+        assert f"page={p}" in url
+        assert "resume=test_id" in url
