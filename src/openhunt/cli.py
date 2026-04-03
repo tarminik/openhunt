@@ -5,8 +5,12 @@ from openhunt import __version__
 
 @click.group()
 @click.version_option(__version__)
-def main() -> None:
+@click.option("--verbose", "-v", is_flag=True, help="Расширенный вывод для отладки.")
+@click.pass_context
+def main(ctx: click.Context, verbose: bool) -> None:
     """openhunt — автоматизация поиска работы на hh.ru."""
+    ctx.ensure_object(dict)
+    ctx.obj["verbose"] = verbose
 
 
 @main.command()

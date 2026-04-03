@@ -14,6 +14,11 @@ def test_version():
     assert "0.1.0" in result.output
 
 
+def test_verbose_flag_accepted():
+    result = runner.invoke(main, ["--verbose", "--version"])
+    assert result.exit_code == 0
+
+
 def test_apply_no_source():
     result = runner.invoke(main, ["apply", "--resume", "abc123"])
     assert result.exit_code != 0
