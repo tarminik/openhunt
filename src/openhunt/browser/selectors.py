@@ -32,7 +32,11 @@ RESUME_CARD = "[data-qa='resume']"
 RESUME_RAISE_BUTTON = "[data-qa~='resume-update-button']"
 
 # --- Resume detail page (/resume/<id>) ---
-RESUME_CONTENT = "[data-qa='resume-block-container']"
+RESUME_POSITION = "[data-qa='resume-position-card']"
+RESUME_EXPERIENCE = "[data-qa='resume-list-card-experience']"
+RESUME_SKILLS = "[data-qa='skills-card']"
+RESUME_EDUCATION = "[data-qa='resume-list-card-education']"
+RESUME_ABOUT = "[data-qa='resume-about-card']"
 
 # --- UI text constants ---
 APPLY_BUTTON_TEXT = "Откликнуться"

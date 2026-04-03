@@ -19,17 +19,22 @@ def sync_resume_profile(page: Page, resume_id: str) -> str:
     page.goto(RESUME_URL.format(resume_id=resume_id), wait_until="domcontentloaded")
     human_delay(0.5, 1.5)
 
-    # Try structured resume blocks first, fall back to full page body
-    blocks = page.query_selector_all(selectors.RESUME_CONTENT)
-    if blocks:
-        parts = []
-        for block in blocks:
-            text = block.inner_text().strip()
+    # Extract structured resume sections
+    block_selectors = [
+        selectors.RESUME_POSITION,
+        selectors.RESUME_EXPERIENCE,
+        selectors.RESUME_SKILLS,
+        selectors.RESUME_EDUCATION,
+        selectors.RESUME_ABOUT,
+    ]
+    parts = []
+    for sel in block_selectors:
+        el = page.query_selector(sel)
+        if el:
+            text = el.inner_text().strip()
             if text:
                 parts.append(text)
-        profile_text = "\n\n".join(parts)
-    else:
-        profile_text = page.inner_text("body").strip()
+    profile_text = "\n\n".join(parts) if parts else page.inner_text("body").strip()
 
     profile_text = profile_text.replace("\xa0", " ")
     save_profile(resume_id, profile_text)
