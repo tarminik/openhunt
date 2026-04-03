@@ -4,12 +4,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from openhunt.llm import generate_cover_letter
+from openhunt.llm import generate_cover_letter, reset_client
 
 
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path, monkeypatch):
     """Redirect config to a temp directory for each test."""
+    reset_client()
     monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
     monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
     monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")

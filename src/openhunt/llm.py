@@ -16,12 +16,21 @@ SYSTEM_PROMPT = (
     '"с большим интересом". Отвечай только текстом письма, без приветствия и подписи.'
 )
 
+_client: OpenAI | None = None
+_client_config_key: tuple | None = None
 
-def generate_cover_letter(vacancy_title: str, vacancy_text: str) -> str | None:
-    """Generate a cover letter using the configured LLM provider.
 
-    Returns the generated text, or None on any error (caller should fall back to template).
-    """
+def reset_client() -> None:
+    """Reset the cached OpenAI client, forcing recreation on next call."""
+    global _client, _client_config_key
+    _client = None
+    _client_config_key = None
+
+
+def _get_client() -> OpenAI | None:
+    """Return a cached OpenAI client, recreating only when config changes."""
+    global _client, _client_config_key
+
     llm_config = get_llm_config()
     if not llm_config:
         return None
@@ -32,9 +41,33 @@ def generate_cover_letter(vacancy_title: str, vacancy_text: str) -> str | None:
         click.echo("  ! LLM: не указан base_url для кастомного провайдера.")
         return None
 
-    try:
-        client = OpenAI(base_url=base_url, api_key=llm_config["api_key"])
+    config_key = (base_url, llm_config["api_key"])
+    if _client is not None and _client_config_key == config_key:
+        return _client
 
+    try:
+        _client = OpenAI(base_url=base_url, api_key=llm_config["api_key"])
+        _client_config_key = config_key
+        return _client
+    except Exception as e:
+        click.echo(f"  ! LLM ошибка: {e}")
+        return None
+
+
+def generate_cover_letter(vacancy_title: str, vacancy_text: str) -> str | None:
+    """Generate a cover letter using the configured LLM provider.
+
+    Returns the generated text, or None on any error (caller should fall back to template).
+    """
+    llm_config = get_llm_config()
+    if not llm_config:
+        return None
+
+    client = _get_client()
+    if not client:
+        return None
+
+    try:
         user_message = f"Вакансия: {vacancy_title}\n\n{vacancy_text}"
 
         response = client.chat.completions.create(
