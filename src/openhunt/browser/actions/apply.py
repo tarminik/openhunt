@@ -114,19 +114,25 @@ def _fill_cover_letter(page: Page, cover_letter: str) -> None:
         human_delay(0.3, 0.6)
 
 
+def _has_visible_text(page: Page, text: str, exact: bool = True) -> bool:
+    """Check if the page contains visible text matching the given string."""
+    loc = page.get_by_text(text, exact=exact)
+    return loc.count() > 0 and loc.first.is_visible()
+
+
 def _page_has_success_text(page: Page) -> bool:
-    """Check if the page contains a success message without reading the full body text."""
+    """Check if the page contains a visible success message."""
     return (
-        page.get_by_text(selectors.RESPONSE_DELIVERED_TEXT).count() > 0
-        or page.get_by_text(selectors.RESPONSE_SENT_TEXT).count() > 0
+        _has_visible_text(page, selectors.RESPONSE_DELIVERED_TEXT)
+        or _has_visible_text(page, selectors.RESPONSE_SENT_TEXT)
     )
 
 
 def _page_has_questionnaire_text(page: Page) -> bool:
-    """Check if the page contains a questionnaire prompt without reading the full body text."""
+    """Check if the page contains a visible questionnaire prompt."""
     return (
-        page.get_by_text(selectors.QUESTIONNAIRE_TEXT).count() > 0
-        or page.get_by_text(selectors.QUESTIONNAIRE_ALT_TEXT).count() > 0
+        _has_visible_text(page, selectors.QUESTIONNAIRE_TEXT)
+        or _has_visible_text(page, selectors.QUESTIONNAIRE_ALT_TEXT, exact=False)
     )
 
 

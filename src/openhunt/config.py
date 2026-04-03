@@ -1,5 +1,6 @@
 """User configuration and data directory management."""
 
+import copy
 import tomllib
 from pathlib import Path
 
@@ -26,12 +27,12 @@ def invalidate_config_cache() -> None:
 def load_config() -> dict:
     global _config_cache
     if _config_cache is not None:
-        return _config_cache
+        return copy.deepcopy(_config_cache)
     if not CONFIG_PATH.exists():
         return {}
     with open(CONFIG_PATH, "rb") as f:
         _config_cache = tomllib.load(f)
-    return _config_cache
+    return copy.deepcopy(_config_cache)
 
 
 def save_config(config: dict) -> None:
