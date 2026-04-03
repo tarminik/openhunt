@@ -38,13 +38,21 @@ def get_profile(resume_id: str) -> str | None:
     return None
 
 
-def save_profile(resume_id: str, text: str) -> None:
-    """Save profile text with current timestamp."""
+def get_user_name() -> str | None:
+    """Return stored user name, or None."""
+    profiles = _load_profiles()
+    return profiles.get("_user_name")
+
+
+def save_profile(resume_id: str, text: str, user_name: str | None = None) -> None:
+    """Save profile text with current timestamp and optionally the user name."""
     profiles = _load_profiles()
     profiles[resume_id] = {
         "text": text,
         "synced_at": time.time(),
     }
+    if user_name:
+        profiles["_user_name"] = user_name
     _save_profiles(profiles)
 
 

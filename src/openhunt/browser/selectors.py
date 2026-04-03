@@ -31,6 +31,9 @@ RESPONSE_LETTER_SUBMIT = "[data-qa='vacancy-response-letter-submit']"
 RESUME_CARD = "[data-qa='resume']"
 RESUME_RAISE_BUTTON = "[data-qa~='resume-update-button']"
 
+# --- User profile (header menu) ---
+USER_FULLNAME = "[data-qa='profile-activator-fullname']"
+
 # --- Resume detail page (/resume/<id>) ---
 RESUME_POSITION = "[data-qa='resume-position-card']"
 RESUME_EXPERIENCE = "[data-qa='resume-list-card-experience']"

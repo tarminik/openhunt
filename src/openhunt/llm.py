@@ -65,7 +65,10 @@ def _get_client() -> OpenAI | None:
 
 
 def generate_cover_letter(
-    vacancy_title: str, vacancy_text: str, profile_text: str = ""
+    vacancy_title: str,
+    vacancy_text: str,
+    profile_text: str = "",
+    user_name: str = "",
 ) -> str | None:
     """Generate a cover letter using the configured LLM provider.
 
@@ -81,6 +84,8 @@ def generate_cover_letter(
 
     try:
         parts = []
+        if user_name:
+            parts.append(f"Имя соискателя: {user_name}")
         if profile_text:
             parts.append(f"Профиль соискателя:\n{profile_text}")
         parts.append(f"Вакансия: {vacancy_title}\n\n{vacancy_text}")
@@ -92,7 +97,7 @@ def generate_cover_letter(
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ],
-            max_tokens=300,
+            max_tokens=500,
             temperature=0.7,
         )
         if not response.choices:

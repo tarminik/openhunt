@@ -101,12 +101,16 @@ def _extract_vacancy_info(page: Page) -> tuple[str, str]:
 
 
 def _generate_or_fallback(
-    vacancy_title: str, vacancy_text: str, fallback: str, profile_text: str = ""
+    vacancy_title: str,
+    vacancy_text: str,
+    fallback: str,
+    profile_text: str = "",
+    user_name: str = "",
 ) -> str:
     """Try LLM generation, fall back to template on failure."""
     from openhunt.llm import generate_cover_letter
 
-    generated = generate_cover_letter(vacancy_title, vacancy_text, profile_text)
+    generated = generate_cover_letter(vacancy_title, vacancy_text, profile_text, user_name)
     if generated:
         return generated
     click.echo("  ! LLM не сгенерировал письмо, используется шаблон.")
@@ -157,6 +161,7 @@ def _try_apply(
     letter_strategy: LetterStrategy = LetterStrategy.TEMPLATE,
     dry_run: bool = False,
     profile_text: str = "",
+    user_name: str = "",
 ) -> ApplyResult:
     """Try to apply to a single vacancy.
 
@@ -224,7 +229,7 @@ def _try_apply(
             if letter_visible:
                 if vacancy_title or vacancy_text:
                     cover_letter = _generate_or_fallback(
-                        vacancy_title, vacancy_text, cover_letter, profile_text
+                        vacancy_title, vacancy_text, cover_letter, profile_text, user_name
                     )
                 _fill_cover_letter(page, cover_letter)
             popup_submit.click()
@@ -284,13 +289,15 @@ def apply_to_vacancies(
 
         # Silent auto-sync of resume profile if stale or missing
         profile_text = ""
+        user_name = ""
         if letter_strategy in (LetterStrategy.LLM, LetterStrategy.AUTO):
-            from openhunt.memory import get_profile, profile_needs_sync
+            from openhunt.memory import get_profile, get_user_name, profile_needs_sync
 
             if profile_needs_sync(resume_id):
                 from openhunt.browser.actions.profile import sync_resume_profile
                 sync_resume_profile(page, resume_id)
             profile_text = get_profile(resume_id) or ""
+            user_name = get_user_name() or ""
 
         applied = 0
         skipped = {ApplyResult.ALREADY_APPLIED: 0, ApplyResult.QUESTIONNAIRE: 0, ApplyResult.ERROR: 0}
@@ -326,7 +333,7 @@ def apply_to_vacancies(
                     break
 
                 try:
-                    result = _try_apply(page, link, resume_id, cover_letter, letter_strategy, dry_run, profile_text)
+                    result = _try_apply(page, link, resume_id, cover_letter, letter_strategy, dry_run, profile_text, user_name)
                 except Exception as e:
                     click.echo(f"  ! Ошибка: {e}")
                     result = ApplyResult.ERROR
