@@ -125,6 +125,36 @@ def _fill_cover_letter(page: Page, cover_letter: str) -> None:
         human_delay(0.3, 0.6)
 
 
+def _try_fill_inline_letter(
+    page: Page,
+    cover_letter: str,
+    letter_strategy: "LetterStrategy",
+    vacancy_title: str = "",
+    vacancy_text: str = "",
+    profile_text: str = "",
+    user_name: str = "",
+) -> None:
+    """Fill and submit the inline cover letter form shown after instant apply."""
+    if letter_strategy == LetterStrategy.OFF:
+        return
+
+    textarea = page.query_selector(selectors.RESPONSE_LETTER_TEXTAREA)
+    submit = page.query_selector(selectors.RESPONSE_LETTER_SUBMIT)
+    if not textarea or not submit or not textarea.is_visible():
+        return
+
+    if letter_strategy in (LetterStrategy.LLM, LetterStrategy.AUTO):
+        if vacancy_title or vacancy_text:
+            cover_letter = _generate_or_fallback(
+                vacancy_title, vacancy_text, cover_letter, profile_text, user_name
+            )
+
+    textarea.fill(cover_letter)
+    human_delay(0.3, 0.6)
+    submit.click()
+    human_delay(1.0, 2.0)
+
+
 def _letter_field_is_visible(page: Page) -> bool:
     """Check if the cover letter textarea is present and visible in the popup."""
     el = page.query_selector(selectors.RESPONSE_POPUP_LETTER_INPUT)
@@ -206,7 +236,12 @@ def _try_apply(
     _select_resume_in_popup(page, resume_id)
 
     # --- Flow 1: Simple apply (resume sent immediately, no popup) ---
+    # After instant apply, hh.ru may show an inline letter form.
     if _page_has_success_text(page):
+        _try_fill_inline_letter(
+            page, cover_letter, letter_strategy,
+            vacancy_title, vacancy_text, profile_text, user_name,
+        )
         return ApplyResult.APPLIED
 
     # --- Flow 4: Questionnaire page ---
@@ -245,7 +280,7 @@ def _try_apply(
                 if letter_visible:
                     if letter_strategy == LetterStrategy.AUTO and (vacancy_title or vacancy_text):
                         cover_letter = _generate_or_fallback(
-                            vacancy_title, vacancy_text, cover_letter
+                            vacancy_title, vacancy_text, cover_letter, profile_text, user_name
                         )
                     _fill_cover_letter(page, cover_letter)
                     popup_submit = page.query_selector(selectors.RESPONSE_POPUP_SUBMIT)

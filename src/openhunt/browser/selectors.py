@@ -24,8 +24,10 @@ RESPONSE_POPUP_SUBMIT = "[data-qa='vacancy-response-submit-popup']"
 RESPONSE_POPUP_LETTER_INPUT = "[data-qa='vacancy-response-popup-form-letter-input']"
 RESPONSE_POPUP_RESUME_SELECT = "[data-qa~='resume-select']"
 
-# --- Post-apply page (simple vacancies without popup) ---
+# --- Post-apply inline form (simple vacancies without popup) ---
 RESPONSE_LETTER_SUBMIT = "[data-qa='vacancy-response-letter-submit']"
+RESPONSE_LETTER_INFORMER = "[data-qa='vacancy-response-letter-informer']"
+RESPONSE_LETTER_TEXTAREA = "[data-qa='vacancy-response-letter-informer'] textarea"
 
 # --- Resume page (/applicant/resumes) ---
 RESUME_CARD = "[data-qa='resume']"
