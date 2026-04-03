@@ -73,6 +73,30 @@ def _select_resume_in_popup(page: Page, resume_id: str) -> None:
     )
 
 
+def _extract_vacancy_info(page: Page) -> tuple[str, str]:
+    """Extract vacancy title and description text from the current page."""
+    title_el = page.query_selector(selectors.VACANCY_TITLE)
+    title = title_el.inner_text().strip() if title_el else ""
+
+    desc_el = page.query_selector(selectors.VACANCY_DESCRIPTION)
+    description = desc_el.inner_text().strip() if desc_el else ""
+
+    return title, description
+
+
+def _generate_or_fallback(
+    vacancy_title: str, vacancy_text: str, fallback: str
+) -> str:
+    """Try LLM generation, fall back to template on failure."""
+    from openhunt.llm import generate_cover_letter
+
+    generated = generate_cover_letter(vacancy_title, vacancy_text)
+    if generated:
+        return generated
+    click.echo("  ! LLM не сгенерировал письмо, используется шаблон.")
+    return fallback
+
+
 def _fill_cover_letter(page: Page, cover_letter: str) -> None:
     """Fill the cover letter field if present and visible in the current popup."""
     letter_input = page.query_selector(selectors.RESPONSE_POPUP_LETTER_INPUT)
@@ -81,7 +105,13 @@ def _fill_cover_letter(page: Page, cover_letter: str) -> None:
         human_delay(0.3, 0.6)
 
 
-def _try_apply(page: Page, vacancy_url: str, resume_id: str, cover_letter: str) -> str:
+def _try_apply(
+    page: Page,
+    vacancy_url: str,
+    resume_id: str,
+    cover_letter: str,
+    use_llm: bool = False,
+) -> str:
     """Try to apply to a single vacancy.
 
     hh.ru has several apply flows:
@@ -98,6 +128,12 @@ def _try_apply(page: Page, vacancy_url: str, resume_id: str, cover_letter: str) 
     """
     page.goto(vacancy_url, wait_until="domcontentloaded")
     human_delay(0.5, 1.5)
+
+    # Extract vacancy info early (before clicking apply changes the page).
+    # The actual LLM call is deferred until we know a letter field is present.
+    vacancy_title, vacancy_text = "", ""
+    if use_llm:
+        vacancy_title, vacancy_text = _extract_vacancy_info(page)
 
     # Find the apply button
     apply_btn = page.query_selector(selectors.APPLY_BUTTON)
@@ -128,6 +164,11 @@ def _try_apply(page: Page, vacancy_url: str, resume_id: str, cover_letter: str) 
     # --- Flows 2 & 3: Popup modal (optional or required letter) ---
     popup_submit = page.query_selector(selectors.RESPONSE_POPUP_SUBMIT)
     if popup_submit:
+        # Generate LLM letter only when a letter field is actually present
+        if use_llm and (vacancy_title or vacancy_text):
+            cover_letter = _generate_or_fallback(
+                vacancy_title, vacancy_text, cover_letter
+            )
         _fill_cover_letter(page, cover_letter)
         popup_submit.click()
         human_delay(1.0, 2.0)
@@ -158,6 +199,7 @@ def apply_to_vacancies(
     resume_id: str,
     limit: int,
     cover_letter: str = "",
+    use_llm: bool = False,
 ) -> None:
     """Main apply loop."""
     with browser_context(headless=True) as (context, page):
@@ -196,7 +238,7 @@ def apply_to_vacancies(
                     break
 
                 try:
-                    result = _try_apply(page, link, resume_id, cover_letter)
+                    result = _try_apply(page, link, resume_id, cover_letter, use_llm)
                 except Exception as e:
                     click.echo(f"  ! Ошибка: {e}")
                     result = "error"

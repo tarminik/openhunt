@@ -14,6 +14,9 @@ from openhunt.config import (
     get_saved_queries,
     save_query,
     delete_query,
+    get_llm_config,
+    set_llm_config,
+    reset_llm_config,
     CONFIG_PATH,
     OPENHUNT_DIR,
 )
@@ -100,3 +103,38 @@ def test_reset_cover_letter():
     set_cover_letter("Мой текст")
     reset_cover_letter()
     assert get_cover_letter() == DEFAULT_COVER_LETTER
+
+
+def test_get_llm_config_empty():
+    assert get_llm_config() is None
+
+
+def test_set_and_get_llm_config():
+    set_llm_config("openrouter", "sk-test-key", "gpt-4")
+    config = get_llm_config()
+    assert config is not None
+    assert config["provider"] == "openrouter"
+    assert config["api_key"] == "sk-test-key"
+    assert config["model"] == "gpt-4"
+    assert "base_url" not in config
+
+
+def test_set_llm_config_custom_with_base_url():
+    set_llm_config("custom", "sk-key", "my-model", base_url="https://my-llm.com/v1")
+    config = get_llm_config()
+    assert config is not None
+    assert config["provider"] == "custom"
+    assert config["base_url"] == "https://my-llm.com/v1"
+
+
+def test_reset_llm_config():
+    set_llm_config("openrouter", "sk-key", "gpt-4")
+    reset_llm_config()
+    assert get_llm_config() is None
+
+
+def test_reset_llm_config_preserves_other_settings():
+    set_default_resume("abc123")
+    set_llm_config("openrouter", "sk-key", "gpt-4")
+    reset_llm_config()
+    assert get_default_resume() == "abc123"

@@ -68,7 +68,7 @@ openhunt apply --query "NAME:(python OR golang) AND NOT стажёр"
 # Из рекомендованных вакансий (на основе вашего резюме)
 openhunt apply --recommended
 
-# Ограничить количество откликов
+# Ограничить количество откликов (по умолчанию 10)
 openhunt apply --query "backend python" --limit 20
 
 # По сохранённому запросу

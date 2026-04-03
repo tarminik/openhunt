@@ -11,8 +11,8 @@ CONFIG_PATH = OPENHUNT_DIR / "config.toml"
 
 
 def ensure_dirs() -> None:
-    OPENHUNT_DIR.mkdir(exist_ok=True)
-    BROWSER_DIR.mkdir(exist_ok=True)
+    OPENHUNT_DIR.mkdir(mode=0o700, exist_ok=True)
+    BROWSER_DIR.mkdir(mode=0o700, exist_ok=True)
 
 
 def load_config() -> dict:
@@ -26,6 +26,7 @@ def save_config(config: dict) -> None:
     ensure_dirs()
     with open(CONFIG_PATH, "wb") as f:
         tomli_w.dump(config, f)
+    CONFIG_PATH.chmod(0o600)
 
 
 def get_default_resume() -> str | None:
@@ -66,6 +67,38 @@ def get_saved_queries() -> dict[str, str]:
 def save_query(name: str, query: str) -> None:
     config = load_config()
     config.setdefault("queries", {})[name] = query
+    save_config(config)
+
+
+def get_llm_config() -> dict | None:
+    """Return LLM config dict or None if not configured.
+
+    Returns None if required fields (api_key, model, provider) are missing.
+    """
+    config = load_config()
+    llm = config.get("llm")
+    if not llm:
+        return None
+    required = ("api_key", "model", "provider")
+    if not all(llm.get(k) for k in required):
+        return None
+    return llm
+
+
+def set_llm_config(
+    provider: str, api_key: str, model: str, base_url: str | None = None
+) -> None:
+    config = load_config()
+    llm: dict = {"provider": provider, "api_key": api_key, "model": model}
+    if base_url:
+        llm["base_url"] = base_url
+    config["llm"] = llm
+    save_config(config)
+
+
+def reset_llm_config() -> None:
+    config = load_config()
+    config.pop("llm", None)
     save_config(config)
 
 

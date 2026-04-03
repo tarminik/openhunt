@@ -26,7 +26,7 @@ def login() -> None:
 def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int) -> None:
     """Автоматически откликнуться на вакансии."""
     from openhunt.browser.actions.apply import apply_to_vacancies
-    from openhunt.config import get_cover_letter, get_default_resume, get_saved_queries
+    from openhunt.config import get_cover_letter, get_default_resume, get_llm_config, get_saved_queries
 
     if resume is None:
         resume = get_default_resume()
@@ -48,12 +48,15 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
             raise click.UsageError(f"Запрос '{saved}' не найден. Используйте 'openhunt query list'.")
         query = queries[saved]
 
+    use_llm = get_llm_config() is not None
+
     apply_to_vacancies(
         query=query,
         recommended=recommended,
         resume_id=resume,
         limit=limit,
         cover_letter=get_cover_letter(),
+        use_llm=use_llm,
     )
 
 
@@ -155,6 +158,57 @@ def query_list() -> None:
         return
     for name, q in queries.items():
         click.echo(f"  {name}: {q}")
+
+
+@main.group()
+def llm() -> None:
+    """Настройка LLM-провайдера для генерации сопроводительных писем."""
+
+
+@llm.command("setup")
+@click.option(
+    "--provider", "-p", required=True,
+    type=click.Choice(["openrouter", "custom"]),
+    help="LLM-провайдер.",
+)
+@click.option("--api-key", "-k", required=True, help="API-ключ.")
+@click.option("--model", "-m", required=True, help="Название модели.")
+@click.option("--base-url", "-u", type=str, default=None, help="Base URL (только для custom).")
+def llm_setup(provider: str, api_key: str, model: str, base_url: str | None) -> None:
+    """Настроить LLM-провайдер."""
+    from openhunt.config import set_llm_config
+
+    if provider == "custom" and not base_url:
+        raise click.UsageError("Для custom-провайдера укажите --base-url.")
+    set_llm_config(provider, api_key, model, base_url)
+    click.echo(f"LLM настроен: {provider}, модель {model}")
+
+
+@llm.command("show")
+def llm_show() -> None:
+    """Показать текущие настройки LLM."""
+    from openhunt.config import get_llm_config
+
+    config = get_llm_config()
+    if not config:
+        click.echo("LLM не настроен. Используйте: openhunt llm setup")
+        return
+    click.echo(f"  Провайдер: {config['provider']}")
+    key = config["api_key"]
+    masked = key[:4] + "..." + key[-4:] if len(key) > 8 else "***"
+    click.echo(f"  API-ключ:  {masked}")
+    click.echo(f"  Модель:    {config['model']}")
+    if config.get("base_url"):
+        click.echo(f"  Base URL:  {config['base_url']}")
+
+
+@llm.command("reset")
+def llm_reset() -> None:
+    """Удалить настройки LLM (вернуться к шаблону)."""
+    from openhunt.config import reset_llm_config
+
+    reset_llm_config()
+    click.echo("Настройки LLM удалены. Будет использоваться шаблон.")
 
 
 @query.command("delete")
