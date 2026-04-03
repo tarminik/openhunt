@@ -97,7 +97,7 @@ def generate_cover_letter(
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ],
-            max_tokens=500,
+            max_tokens=1024,
             temperature=0.7,
         )
         if not response.choices:
