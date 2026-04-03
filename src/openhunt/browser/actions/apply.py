@@ -1,5 +1,6 @@
 """Auto-apply to vacancies on hh.ru."""
 
+from enum import Enum
 from urllib.parse import quote
 
 import click
@@ -7,6 +8,13 @@ from playwright.sync_api import Page
 
 from openhunt.browser import selectors
 from openhunt.browser.session import browser_context, check_auth, human_delay
+
+
+class ApplyResult(Enum):
+    APPLIED = "applied"
+    ALREADY_APPLIED = "already_applied"
+    QUESTIONNAIRE = "questionnaire"
+    ERROR = "error"
 
 
 SEARCH_URL = "https://hh.ru/search/vacancy?text={query}&page={page}"
@@ -128,7 +136,7 @@ def _try_apply(
     cover_letter: str,
     use_llm: bool = False,
     dry_run: bool = False,
-) -> str:
+) -> ApplyResult:
     """Try to apply to a single vacancy.
 
     hh.ru has several apply flows:
@@ -138,10 +146,10 @@ def _try_apply(
     4. Questionnaire: click apply → form with employer questions → skip
 
     Returns:
-        "applied" — successfully applied (or would apply in dry-run)
-        "already_applied" — already applied to this vacancy
-        "questionnaire" — has required questions from employer
-        "error" — unexpected error
+        ApplyResult.APPLIED — successfully applied (or would apply in dry-run)
+        ApplyResult.ALREADY_APPLIED — already applied to this vacancy
+        ApplyResult.QUESTIONNAIRE — has required questions from employer
+        ApplyResult.ERROR — unexpected error
     """
     page.goto(vacancy_url, wait_until="domcontentloaded")
     human_delay(0.5, 1.5)
@@ -155,14 +163,14 @@ def _try_apply(
     # Find the apply button
     apply_btn = page.query_selector(selectors.APPLY_BUTTON)
     if not apply_btn:
-        return "already_applied"
+        return ApplyResult.ALREADY_APPLIED
 
     btn_text = apply_btn.inner_text().strip()
     if btn_text != selectors.APPLY_BUTTON_TEXT:
-        return "already_applied"
+        return ApplyResult.ALREADY_APPLIED
 
     if dry_run:
-        return "applied"
+        return ApplyResult.APPLIED
 
     apply_btn.click()
     human_delay(1.5, 2.5)
@@ -173,12 +181,12 @@ def _try_apply(
 
     # --- Flow 1: Simple apply (resume sent immediately, no popup) ---
     if _page_has_success_text(page):
-        return "applied"
+        return ApplyResult.APPLIED
 
     # --- Flow 4: Questionnaire page ---
     if _page_has_questionnaire_text(page):
         page.go_back()
-        return "questionnaire"
+        return ApplyResult.QUESTIONNAIRE
 
     # --- Flows 2 & 3: Popup modal (optional or required letter) ---
     popup_submit = page.query_selector(selectors.RESPONSE_POPUP_SUBMIT)
@@ -194,21 +202,21 @@ def _try_apply(
 
         # Verify submission succeeded
         if _page_has_success_text(page):
-            return "applied"
+            return ApplyResult.APPLIED
         # Popup still open — submission failed (e.g. validation error)
         close_btn = page.query_selector(selectors.RESPONSE_POPUP_CLOSE)
         if close_btn:
             close_btn.click()
             human_delay(0.3, 0.5)
-        return "error"
+        return ApplyResult.ERROR
 
     # --- Fallback: post-apply page with letter submit ---
     if page.query_selector(selectors.RESPONSE_LETTER_SUBMIT):
-        return "applied"
+        return ApplyResult.APPLIED
 
     # Unknown state
     page.go_back()
-    return "error"
+    return ApplyResult.ERROR
 
 
 def apply_to_vacancies(
@@ -227,7 +235,7 @@ def apply_to_vacancies(
             return
 
         applied = 0
-        skipped = {"already_applied": 0, "questionnaire": 0, "error": 0}
+        skipped = {ApplyResult.ALREADY_APPLIED: 0, ApplyResult.QUESTIONNAIRE: 0, ApplyResult.ERROR: 0}
         page_num = 0
 
         if dry_run:
@@ -263,9 +271,9 @@ def apply_to_vacancies(
                     result = _try_apply(page, link, resume_id, cover_letter, use_llm, dry_run)
                 except Exception as e:
                     click.echo(f"  ! Ошибка: {e}")
-                    result = "error"
+                    result = ApplyResult.ERROR
 
-                if result == "applied":
+                if result == ApplyResult.APPLIED:
                     applied += 1
                     if dry_run:
                         click.echo(f"  [{applied}/{limit}] Откликнулся бы: {link}")
@@ -275,10 +283,10 @@ def apply_to_vacancies(
                 else:
                     skipped[result] += 1
                     reason = {
-                        "already_applied": "уже откликались",
-                        "questionnaire": "требуется анкета",
-                        "error": "ошибка",
-                    }.get(result, result)
+                        ApplyResult.ALREADY_APPLIED: "уже откликались",
+                        ApplyResult.QUESTIONNAIRE: "требуется анкета",
+                        ApplyResult.ERROR: "ошибка",
+                    }.get(result, str(result))
                     click.echo(f"  ~ Пропуск ({reason}): {link}")
 
             if applied >= limit:
@@ -299,9 +307,9 @@ def apply_to_vacancies(
             click.echo(f"  Откликов отправлено: {applied}")
         if total_skipped > 0:
             click.echo(f"  Пропущено: {total_skipped}")
-            if skipped["already_applied"]:
-                click.echo(f"    Уже откликались: {skipped['already_applied']}")
-            if skipped["questionnaire"]:
-                click.echo(f"    Требуется анкета: {skipped['questionnaire']}")
-            if skipped["error"]:
-                click.echo(f"    Ошибки: {skipped['error']}")
+            if skipped[ApplyResult.ALREADY_APPLIED]:
+                click.echo(f"    Уже откликались: {skipped[ApplyResult.ALREADY_APPLIED]}")
+            if skipped[ApplyResult.QUESTIONNAIRE]:
+                click.echo(f"    Требуется анкета: {skipped[ApplyResult.QUESTIONNAIRE]}")
+            if skipped[ApplyResult.ERROR]:
+                click.echo(f"    Ошибки: {skipped[ApplyResult.ERROR]}")
