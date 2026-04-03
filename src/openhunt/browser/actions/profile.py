@@ -41,8 +41,11 @@ def sync_resume_profile(page: Page, resume_id: str) -> str:
             text = el.inner_text().strip()
             if text:
                 parts.append(text)
-    profile_text = "\n\n".join(parts) if parts else page.inner_text("body").strip()
-    profile_text = profile_text.replace("\xa0", " ")
+    if not parts:
+        click.echo("  ! Не удалось распарсить резюме, профиль не обновлён.")
+        return ""
 
+    profile_text = "\n\n".join(parts)
+    profile_text = profile_text.replace("\xa0", " ")
     save_profile(resume_id, profile_text, user_name)
     return profile_text

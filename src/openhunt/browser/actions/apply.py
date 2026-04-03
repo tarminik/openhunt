@@ -183,6 +183,56 @@ def _page_has_questionnaire_text(page: Page) -> bool:
     )
 
 
+def _wait_for_apply_result(page: Page, timeout: int = 5000) -> str | None:
+    """Wait for one of the mutually exclusive post-apply states to appear.
+
+    Uses Playwright's locator.or_() to race between expected outcomes,
+    avoiding false negatives on slow-rendering pages.
+
+    Returns:
+        "success" — success text visible
+        "questionnaire" — questionnaire prompt visible
+        "popup" — popup submit button visible
+        "inline_letter" — inline letter submit visible
+        None — none appeared within timeout
+    """
+    success_loc = (
+        page.get_by_text(selectors.RESPONSE_DELIVERED_TEXT, exact=True)
+        .or_(page.get_by_text(selectors.RESPONSE_SENT_TEXT, exact=True))
+    )
+    questionnaire_loc = (
+        page.get_by_text(selectors.QUESTIONNAIRE_TEXT, exact=True)
+        .or_(page.get_by_text(selectors.QUESTIONNAIRE_ALT_TEXT, exact=False))
+    )
+    popup_submit_loc = page.locator(selectors.RESPONSE_POPUP_SUBMIT)
+    inline_letter_loc = page.locator(selectors.RESPONSE_LETTER_SUBMIT)
+
+    combined = (
+        success_loc
+        .or_(questionnaire_loc)
+        .or_(popup_submit_loc)
+        .or_(inline_letter_loc)
+    )
+
+    try:
+        combined.first.wait_for(state="visible", timeout=timeout)
+    except Exception:
+        return None
+
+    # Determine which state matched by checking each individually.
+    # Order matters: check the most definitive states first.
+    if success_loc.first.is_visible():
+        return "success"
+    if questionnaire_loc.first.is_visible():
+        return "questionnaire"
+    if popup_submit_loc.first.is_visible():
+        return "popup"
+    if inline_letter_loc.first.is_visible():
+        return "inline_letter"
+
+    return None
+
+
 def _try_apply(
     page: Page,
     vacancy_url: str,
@@ -235,9 +285,12 @@ def _try_apply(
 
     _select_resume_in_popup(page, resume_id)
 
+    # Wait for one of the expected post-apply states to render.
+    apply_state = _wait_for_apply_result(page)
+
     # --- Flow 1: Simple apply (resume sent immediately, no popup) ---
     # After instant apply, hh.ru may show an inline letter form.
-    if _page_has_success_text(page):
+    if apply_state == "success":
         _try_fill_inline_letter(
             page, cover_letter, letter_strategy,
             vacancy_title, vacancy_text, profile_text, user_name,
@@ -245,13 +298,13 @@ def _try_apply(
         return ApplyResult.APPLIED
 
     # --- Flow 4: Questionnaire page ---
-    if _page_has_questionnaire_text(page):
+    if apply_state == "questionnaire":
         page.go_back()
         return ApplyResult.QUESTIONNAIRE
 
     # --- Flows 2 & 3: Popup modal (optional or required letter) ---
     popup_submit = page.query_selector(selectors.RESPONSE_POPUP_SUBMIT)
-    if popup_submit:
+    if apply_state == "popup" and popup_submit:
         letter_visible = _letter_field_is_visible(page)
 
         if letter_strategy == LetterStrategy.TEMPLATE:
@@ -299,7 +352,11 @@ def _try_apply(
         return ApplyResult.ERROR
 
     # --- Fallback: post-apply page with inline letter form ---
-    if page.query_selector(selectors.RESPONSE_LETTER_SUBMIT):
+    if apply_state == "inline_letter" or page.query_selector(selectors.RESPONSE_LETTER_SUBMIT):
+        _try_fill_inline_letter(
+            page, cover_letter, letter_strategy,
+            vacancy_title, vacancy_text, profile_text, user_name,
+        )
         return ApplyResult.APPLIED
 
     # Some flows render success text or inline forms with a delay — retry once
@@ -307,6 +364,10 @@ def _try_apply(
     if _page_has_success_text(page):
         return ApplyResult.APPLIED
     if page.query_selector(selectors.RESPONSE_LETTER_SUBMIT):
+        _try_fill_inline_letter(
+            page, cover_letter, letter_strategy,
+            vacancy_title, vacancy_text, profile_text, user_name,
+        )
         return ApplyResult.APPLIED
 
     # Unknown state
