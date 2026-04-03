@@ -5,6 +5,8 @@ import pytest
 from openhunt.config import (
     load_config,
     save_config,
+    get_default_resume,
+    set_default_resume,
     get_saved_queries,
     save_query,
     delete_query,
@@ -64,3 +66,18 @@ def test_delete_cleans_empty_section():
     delete_query("only")
     config = load_config()
     assert "queries" not in config
+
+
+def test_get_default_resume_empty():
+    assert get_default_resume() is None
+
+
+def test_set_and_get_default_resume():
+    set_default_resume("abc123")
+    assert get_default_resume() == "abc123"
+
+
+def test_overwrite_default_resume():
+    set_default_resume("old_id")
+    set_default_resume("new_id")
+    assert get_default_resume() == "new_id"

@@ -21,12 +21,19 @@ def login() -> None:
 @click.option("--query", "-q", type=str, help="Поисковый запрос.")
 @click.option("--saved", "-s", type=str, help="Имя сохранённого запроса.")
 @click.option("--recommended", "-r", is_flag=True, help="Откликаться на рекомендованные вакансии.")
-@click.option("--resume", type=str, required=True, help="ID резюме на hh.ru.")
+@click.option("--resume", type=str, help="ID резюме на hh.ru (если не указан, используется сохранённый).")
 @click.option("--limit", "-l", type=int, default=10, show_default=True, help="Максимум откликов.")
-def apply(query: str | None, saved: str | None, recommended: bool, resume: str, limit: int) -> None:
+def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int) -> None:
     """Автоматически откликнуться на вакансии."""
     from openhunt.browser.actions.apply import apply_to_vacancies
-    from openhunt.config import get_saved_queries
+    from openhunt.config import get_default_resume, get_saved_queries
+
+    if resume is None:
+        resume = get_default_resume()
+    if not resume:
+        raise click.UsageError(
+            "Укажите --resume или сохраните ID: openhunt resume set <ID>"
+        )
 
     # Resolve the query source
     sources = sum([query is not None, saved is not None, recommended])
@@ -52,6 +59,30 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str, 
 @main.group()
 def resume() -> None:
     """Управление резюме."""
+
+
+@resume.command("set")
+@click.argument("resume_id")
+def resume_set(resume_id: str) -> None:
+    """Сохранить ID резюме по умолчанию."""
+    from openhunt.config import set_default_resume
+
+    if not resume_id.strip():
+        raise click.UsageError("ID резюме не может быть пустым.")
+    set_default_resume(resume_id.strip())
+    click.echo(f"Резюме сохранено: {resume_id.strip()}")
+
+
+@resume.command("show")
+def resume_show() -> None:
+    """Показать сохранённый ID резюме."""
+    from openhunt.config import get_default_resume
+
+    resume_id = get_default_resume()
+    if resume_id:
+        click.echo(resume_id)
+    else:
+        click.echo("Резюме не задано. Сохраните: openhunt resume set <ID>")
 
 
 @resume.command("raise")

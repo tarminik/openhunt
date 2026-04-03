@@ -28,6 +28,16 @@ def save_config(config: dict) -> None:
         tomli_w.dump(config, f)
 
 
+def get_default_resume() -> str | None:
+    return load_config().get("resume")
+
+
+def set_default_resume(resume_id: str) -> None:
+    config = load_config()
+    config["resume"] = resume_id
+    save_config(config)
+
+
 def get_saved_queries() -> dict[str, str]:
     return load_config().get("queries", {})
 

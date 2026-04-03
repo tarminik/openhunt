@@ -46,25 +46,36 @@ openhunt login
 
 Сессия сохраняется между запусками. Повторный логин нужен только когда сессия истечёт.
 
-### Отклики на вакансии
+### Настройка резюме
 
-Для откликов нужно указать ID резюме с hh.ru (можно найти в URL вашего резюме):
+Сохраните ID резюме один раз (ID можно найти в URL вашего резюме на hh.ru):
+
+```bash
+openhunt resume set <id>
+```
+
+После этого `--resume` можно не указывать — сохранённое резюме используется автоматически.
+
+### Отклики на вакансии
 
 ```bash
 # По поисковому запросу
-openhunt apply --resume <id> --query "python developer"
+openhunt apply --query "python developer"
 
 # С использованием языка запросов hh.ru
-openhunt apply --resume <id> --query "NAME:(python OR golang) AND NOT стажёр"
+openhunt apply --query "NAME:(python OR golang) AND NOT стажёр"
 
 # Из рекомендованных вакансий (на основе вашего резюме)
-openhunt apply --resume <id> --recommended
+openhunt apply --recommended
 
 # Ограничить количество откликов
-openhunt apply --resume <id> --query "backend python" --limit 20
+openhunt apply --query "backend python" --limit 20
 
 # По сохранённому запросу
-openhunt apply --resume <id> --saved backend
+openhunt apply --saved backend
+
+# Переопределить резюме для конкретного запуска
+openhunt apply --resume <другой_id> --query "frontend react"
 ```
 
 Автоматически пропускаются:
