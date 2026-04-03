@@ -19,6 +19,7 @@ class ApplyResult(Enum):
 
 SEARCH_URL = "https://hh.ru/search/vacancy?text={query}&page={page}"
 RECOMMENDED_URL = "https://hh.ru/search/vacancy?resume={resume_id}&hhtmFrom=main&page={page}"
+GOTO_TIMEOUT = 15_000  # 15 seconds for vacancy page loads
 
 
 def _get_vacancy_links(page: Page) -> list[str]:
@@ -151,7 +152,7 @@ def _try_apply(
         ApplyResult.QUESTIONNAIRE — has required questions from employer
         ApplyResult.ERROR — unexpected error
     """
-    page.goto(vacancy_url, wait_until="domcontentloaded")
+    page.goto(vacancy_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
     human_delay(0.5, 1.5)
 
     # Extract vacancy info early (before clicking apply changes the page).
