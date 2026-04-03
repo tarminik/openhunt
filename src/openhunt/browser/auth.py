@@ -7,7 +7,7 @@ from openhunt.browser.session import browser_context, check_auth, LOGIN_URL
 
 def login() -> None:
     """Open a headed browser for the user to log in manually."""
-    with browser_context(headless=False) as (context, page):
+    with browser_context(headless=False) as page:
         if check_auth(page):
             click.echo("Вы уже авторизованы на hh.ru.")
             return

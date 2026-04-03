@@ -229,7 +229,7 @@ def apply_to_vacancies(
     dry_run: bool = False,
 ) -> None:
     """Main apply loop."""
-    with browser_context(headless=True) as (context, page):
+    with browser_context(headless=True) as page:
         if not check_auth(page):
             click.echo("Сессия истекла. Выполните 'openhunt login' для авторизации.")
             return

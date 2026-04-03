@@ -13,7 +13,7 @@ RESUMES_URL = "https://hh.ru/applicant/resumes"
 
 def raise_resume() -> None:
     """Raise all resumes in search on hh.ru."""
-    with browser_context(headless=True) as (context, page):
+    with browser_context(headless=True) as page:
         if not check_auth(page):
             click.echo("Сессия истекла. Выполните 'openhunt login' для авторизации.")
             return

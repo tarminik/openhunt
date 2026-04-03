@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import click
-from playwright.sync_api import sync_playwright, BrowserContext, Page
+from playwright.sync_api import sync_playwright, Page
 
 from openhunt.config import BROWSER_DIR, ensure_dirs
 from openhunt.browser import selectors
@@ -48,7 +48,7 @@ def browser_context(headless: bool = True):
     Automatically installs Chromium on first use if not present.
 
     Usage:
-        with browser_context(headless=True) as (context, page):
+        with browser_context(headless=True) as page:
             page.goto("https://hh.ru")
     """
     ensure_dirs()
@@ -63,7 +63,7 @@ def browser_context(headless: bool = True):
             locale="ru-RU",
         )
         page = context.pages[0] if context.pages else context.new_page()
-        yield context, page
+        yield page
     finally:
         if context is not None:
             context.close()
