@@ -74,6 +74,9 @@ openhunt apply --query "backend python" --limit 20
 # По сохранённому запросу
 openhunt apply --saved backend
 
+# Пробный запуск — показать вакансии без отправки откликов
+openhunt apply --query "backend python" --dry-run
+
 # Переопределить резюме для конкретного запуска
 openhunt apply --resume <другой_id> --query "frontend react"
 ```
