@@ -105,6 +105,22 @@ def _fill_cover_letter(page: Page, cover_letter: str) -> None:
         human_delay(0.3, 0.6)
 
 
+def _page_has_success_text(page: Page) -> bool:
+    """Check if the page contains a success message without reading the full body text."""
+    return (
+        page.get_by_text(selectors.RESPONSE_DELIVERED_TEXT).count() > 0
+        or page.get_by_text(selectors.RESPONSE_SENT_TEXT).count() > 0
+    )
+
+
+def _page_has_questionnaire_text(page: Page) -> bool:
+    """Check if the page contains a questionnaire prompt without reading the full body text."""
+    return (
+        page.get_by_text(selectors.QUESTIONNAIRE_TEXT).count() > 0
+        or page.get_by_text(selectors.QUESTIONNAIRE_ALT_TEXT).count() > 0
+    )
+
+
 def _try_apply(
     page: Page,
     vacancy_url: str,
@@ -156,12 +172,11 @@ def _try_apply(
     _select_resume_in_popup(page, resume_id)
 
     # --- Flow 1: Simple apply (resume sent immediately, no popup) ---
-    body = page.inner_text("body")
-    if selectors.RESPONSE_DELIVERED_TEXT in body or selectors.RESPONSE_SENT_TEXT in body:
+    if _page_has_success_text(page):
         return "applied"
 
     # --- Flow 4: Questionnaire page ---
-    if selectors.QUESTIONNAIRE_TEXT in body or selectors.QUESTIONNAIRE_ALT_TEXT in body:
+    if _page_has_questionnaire_text(page):
         page.go_back()
         return "questionnaire"
 
@@ -178,8 +193,7 @@ def _try_apply(
         human_delay(1.0, 2.0)
 
         # Verify submission succeeded
-        body = page.inner_text("body")
-        if selectors.RESPONSE_DELIVERED_TEXT in body or selectors.RESPONSE_SENT_TEXT in body:
+        if _page_has_success_text(page):
             return "applied"
         # Popup still open — submission failed (e.g. validation error)
         close_btn = page.query_selector(selectors.RESPONSE_POPUP_CLOSE)
