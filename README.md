@@ -18,17 +18,21 @@ CLI-инструмент для автоматизации поиска рабо
 
 ## Установка
 
-Требуется Python 3.12+ и [uv](https://docs.astral.sh/uv/).
+Требуется Python 3.12+.
 
 ```bash
 uv tool install openhunt
 ```
 
-После установки нужно установить браузер для Playwright:
+Или через pipx / pip:
 
 ```bash
-playwright install chromium
+pipx install openhunt
+# или
+pip install openhunt
 ```
+
+Браузер Chromium установится автоматически при первом запуске.
 
 ## Использование
 
@@ -99,7 +103,6 @@ openhunt query delete backend
 git clone https://github.com/tarminik/openhunt.git
 cd openhunt
 uv sync
-playwright install chromium
 uv run openhunt --help
 ```
 
