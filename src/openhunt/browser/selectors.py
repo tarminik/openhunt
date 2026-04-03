@@ -15,7 +15,7 @@ PAGER_NEXT = "[data-qa='pager-next']"
 
 # --- Vacancy page ---
 VACANCY_TITLE = "[data-qa='vacancy-title']"
-VACANCY_DESCRIPTION = ".vacancy-description"
+VACANCY_DESCRIPTION = ".vacancy-section.vacancy-section_magritte"
 APPLY_BUTTON = "[data-qa='vacancy-response-link-top']"
 
 # --- Apply popup (modal dialog after clicking apply) ---
