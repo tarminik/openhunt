@@ -116,6 +116,18 @@ def reset_llm_config() -> None:
     save_config(config)
 
 
+def get_letter_strategy() -> str | None:
+    """Return the saved letter strategy, or None if not set."""
+    return load_config().get("letter_strategy")
+
+
+def set_letter_strategy(strategy: str) -> None:
+    """Save the letter strategy to config."""
+    config = load_config()
+    config["letter_strategy"] = strategy
+    save_config(config)
+
+
 def delete_query(name: str) -> bool:
     config = load_config()
     if "queries" in config and name in config["queries"]:

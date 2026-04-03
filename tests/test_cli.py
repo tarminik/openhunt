@@ -260,7 +260,7 @@ def test_apply_dry_run_flag(tmp_path, monkeypatch):
     assert captured["dry_run"] is True
 
 
-def test_apply_passes_use_llm_flag(tmp_path, monkeypatch):
+def test_apply_default_strategy_without_llm(tmp_path, monkeypatch):
     monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
     monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
     monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
@@ -270,12 +270,24 @@ def test_apply_passes_use_llm_flag(tmp_path, monkeypatch):
         captured.update(kwargs)
     monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
 
-    # Without LLM configured
     runner.invoke(main, ["resume", "set", "abc123"])
     runner.invoke(main, ["apply", "--query", "python"])
-    assert captured["use_llm"] is False
 
-    # With LLM configured
+    from openhunt.browser.actions.apply import LetterStrategy
+    assert captured["letter_strategy"] == LetterStrategy.TEMPLATE
+
+
+def test_apply_default_strategy_with_llm(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
     runner.invoke(main, [
         "llm", "setup",
         "--provider", "openrouter",
@@ -283,7 +295,117 @@ def test_apply_passes_use_llm_flag(tmp_path, monkeypatch):
         "--model", "gpt-4",
     ])
     runner.invoke(main, ["apply", "--query", "python"])
-    assert captured["use_llm"] is True
+
+    from openhunt.browser.actions.apply import LetterStrategy
+    assert captured["letter_strategy"] == LetterStrategy.LLM
+
+
+def test_apply_letter_flag_overrides_default(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, [
+        "llm", "setup",
+        "--provider", "openrouter",
+        "--api-key", "sk-test",
+        "--model", "gpt-4",
+    ])
+    runner.invoke(main, ["apply", "--query", "python", "--letter", "template"])
+
+    from openhunt.browser.actions.apply import LetterStrategy
+    assert captured["letter_strategy"] == LetterStrategy.TEMPLATE
+
+
+def test_apply_letter_flag_auto(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["apply", "--query", "python", "--letter", "auto"])
+
+    from openhunt.browser.actions.apply import LetterStrategy
+    assert captured["letter_strategy"] == LetterStrategy.AUTO
+
+
+def test_apply_uses_saved_strategy(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["letter", "strategy", "auto"])
+    runner.invoke(main, ["apply", "--query", "python"])
+
+    from openhunt.browser.actions.apply import LetterStrategy
+    assert captured["letter_strategy"] == LetterStrategy.AUTO
+
+
+def test_apply_cli_overrides_saved_strategy(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["letter", "strategy", "auto"])
+    runner.invoke(main, ["apply", "--query", "python", "--letter", "off"])
+
+    from openhunt.browser.actions.apply import LetterStrategy
+    assert captured["letter_strategy"] == LetterStrategy.OFF
+
+
+def test_letter_strategy_show_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["letter", "strategy"])
+    assert result.exit_code == 0
+    assert "не задана" in result.output
+
+
+def test_letter_strategy_set_and_show(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["letter", "strategy", "auto"])
+    assert result.exit_code == 0
+    assert "auto" in result.output
+
+    result = runner.invoke(main, ["letter", "strategy"])
+    assert "auto" in result.output
+
+
+def test_letter_strategy_invalid(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["letter", "strategy", "invalid"])
+    assert result.exit_code != 0
 
 
 def test_query_list_empty(tmp_path, monkeypatch):

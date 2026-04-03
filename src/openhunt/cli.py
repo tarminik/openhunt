@@ -28,10 +28,16 @@ def login() -> None:
 @click.option("--resume", type=str, help="ID резюме на hh.ru (если не указан, используется сохранённый).")
 @click.option("--limit", "-l", type=int, default=10, show_default=True, help="Максимум откликов.")
 @click.option("--dry-run", is_flag=True, help="Показать вакансии без отправки откликов.")
-def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool) -> None:
+@click.option(
+    "--letter",
+    type=click.Choice(["off", "template", "llm", "auto"], case_sensitive=False),
+    default=None,
+    help="Стратегия сопроводительного письма (off/template/llm/auto).",
+)
+def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool, letter: str | None) -> None:
     """Автоматически откликнуться на вакансии."""
-    from openhunt.browser.actions.apply import apply_to_vacancies
-    from openhunt.config import get_cover_letter, get_default_resume, get_llm_config, get_saved_queries
+    from openhunt.browser.actions.apply import LetterStrategy, apply_to_vacancies
+    from openhunt.config import get_cover_letter, get_default_resume, get_letter_strategy, get_llm_config, get_saved_queries
 
     if resume is None:
         resume = get_default_resume()
@@ -53,7 +59,20 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
             raise click.UsageError(f"Запрос '{saved}' не найден. Используйте 'openhunt query list'.")
         query = queries[saved]
 
-    use_llm = get_llm_config() is not None
+    # Resolve letter strategy: CLI flag > saved config > backward-compatible default
+    if letter is not None:
+        letter_strategy = LetterStrategy(letter)
+    else:
+        saved_strategy = get_letter_strategy()
+        if saved_strategy is not None:
+            try:
+                letter_strategy = LetterStrategy(saved_strategy)
+            except ValueError:
+                letter_strategy = None
+        else:
+            letter_strategy = None
+        if letter_strategy is None:
+            letter_strategy = LetterStrategy.LLM if get_llm_config() is not None else LetterStrategy.TEMPLATE
 
     apply_to_vacancies(
         query=query,
@@ -61,7 +80,7 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
         resume_id=resume,
         limit=limit,
         cover_letter=get_cover_letter(),
-        use_llm=use_llm,
+        letter_strategy=letter_strategy,
         dry_run=dry_run,
     )
 
@@ -135,6 +154,28 @@ def letter_reset() -> None:
 
     reset_cover_letter()
     click.echo("Шаблон сброшен на значение по умолчанию.")
+
+
+@letter.command("strategy")
+@click.argument("mode", required=False, default=None)
+def letter_strategy_cmd(mode: str | None) -> None:
+    """Показать или задать стратегию письма (off/template/llm/auto)."""
+    from openhunt.config import get_letter_strategy, set_letter_strategy
+
+    if mode is None:
+        current = get_letter_strategy()
+        if current:
+            click.echo(f"Стратегия: {current}")
+        else:
+            click.echo("Стратегия не задана (используется по умолчанию).")
+        return
+
+    valid = ("off", "template", "llm", "auto")
+    if mode.lower() not in valid:
+        raise click.UsageError(f"Допустимые значения: {', '.join(valid)}")
+
+    set_letter_strategy(mode.lower())
+    click.echo(f"Стратегия сохранена: {mode.lower()}")
 
 
 @main.group()

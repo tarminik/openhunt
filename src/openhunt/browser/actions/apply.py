@@ -1,6 +1,6 @@
 """Auto-apply to vacancies on hh.ru."""
 
-from enum import Enum
+from enum import Enum, StrEnum
 from urllib.parse import quote
 
 import click
@@ -8,6 +8,13 @@ from playwright.sync_api import Page
 
 from openhunt.browser import selectors
 from openhunt.browser.session import browser_context, check_auth, human_delay
+
+
+class LetterStrategy(StrEnum):
+    OFF = "off"
+    TEMPLATE = "template"
+    LLM = "llm"
+    AUTO = "auto"
 
 
 class ApplyResult(Enum):
@@ -114,6 +121,12 @@ def _fill_cover_letter(page: Page, cover_letter: str) -> None:
         human_delay(0.3, 0.6)
 
 
+def _letter_field_is_visible(page: Page) -> bool:
+    """Check if the cover letter textarea is present and visible in the popup."""
+    el = page.query_selector(selectors.RESPONSE_POPUP_LETTER_INPUT)
+    return el is not None and el.is_visible()
+
+
 def _has_visible_text(page: Page, text: str, exact: bool = True) -> bool:
     """Check if the page contains visible text matching the given string."""
     loc = page.get_by_text(text, exact=exact)
@@ -141,7 +154,7 @@ def _try_apply(
     vacancy_url: str,
     resume_id: str,
     cover_letter: str,
-    use_llm: bool = False,
+    letter_strategy: LetterStrategy = LetterStrategy.TEMPLATE,
     dry_run: bool = False,
 ) -> ApplyResult:
     """Try to apply to a single vacancy.
@@ -162,9 +175,9 @@ def _try_apply(
     human_delay(0.5, 1.5)
 
     # Extract vacancy info early (before clicking apply changes the page).
-    # The actual LLM call is deferred until we know a letter field is present.
+    # Only needed for strategies that may use LLM generation.
     vacancy_title, vacancy_text = "", ""
-    if use_llm or dry_run:
+    if letter_strategy in (LetterStrategy.LLM, LetterStrategy.AUTO) or dry_run:
         vacancy_title, vacancy_text = _extract_vacancy_info(page)
 
     # Find the apply button
@@ -198,19 +211,46 @@ def _try_apply(
     # --- Flows 2 & 3: Popup modal (optional or required letter) ---
     popup_submit = page.query_selector(selectors.RESPONSE_POPUP_SUBMIT)
     if popup_submit:
-        # Generate LLM letter only when a letter field is actually present
-        if use_llm and (vacancy_title or vacancy_text):
-            cover_letter = _generate_or_fallback(
-                vacancy_title, vacancy_text, cover_letter
-            )
-        _fill_cover_letter(page, cover_letter)
-        popup_submit.click()
-        human_delay(1.0, 2.0)
+        letter_visible = _letter_field_is_visible(page)
+
+        if letter_strategy == LetterStrategy.TEMPLATE:
+            if letter_visible:
+                _fill_cover_letter(page, cover_letter)
+            popup_submit.click()
+            human_delay(1.0, 2.0)
+
+        elif letter_strategy == LetterStrategy.LLM:
+            if letter_visible:
+                if vacancy_title or vacancy_text:
+                    cover_letter = _generate_or_fallback(
+                        vacancy_title, vacancy_text, cover_letter
+                    )
+                _fill_cover_letter(page, cover_letter)
+            popup_submit.click()
+            human_delay(1.0, 2.0)
+
+        elif letter_strategy in (LetterStrategy.OFF, LetterStrategy.AUTO):
+            # Try submitting without a letter first
+            popup_submit.click()
+            human_delay(1.0, 2.0)
+
+            if not _page_has_success_text(page):
+                # Popup stayed open → letter is required → fill and retry
+                if letter_visible:
+                    if letter_strategy == LetterStrategy.AUTO and (vacancy_title or vacancy_text):
+                        cover_letter = _generate_or_fallback(
+                            vacancy_title, vacancy_text, cover_letter
+                        )
+                    _fill_cover_letter(page, cover_letter)
+                    popup_submit = page.query_selector(selectors.RESPONSE_POPUP_SUBMIT)
+                    if popup_submit:
+                        popup_submit.click()
+                        human_delay(1.0, 2.0)
 
         # Verify submission succeeded
         if _page_has_success_text(page):
             return ApplyResult.APPLIED
-        # Popup still open — submission failed (e.g. validation error)
+        # Popup still open — submission failed
         close_btn = page.query_selector(selectors.RESPONSE_POPUP_CLOSE)
         if close_btn:
             close_btn.click()
@@ -232,7 +272,7 @@ def apply_to_vacancies(
     resume_id: str,
     limit: int,
     cover_letter: str = "",
-    use_llm: bool = False,
+    letter_strategy: LetterStrategy = LetterStrategy.TEMPLATE,
     dry_run: bool = False,
 ) -> None:
     """Main apply loop."""
@@ -275,7 +315,7 @@ def apply_to_vacancies(
                     break
 
                 try:
-                    result = _try_apply(page, link, resume_id, cover_letter, use_llm, dry_run)
+                    result = _try_apply(page, link, resume_id, cover_letter, letter_strategy, dry_run)
                 except Exception as e:
                     click.echo(f"  ! Ошибка: {e}")
                     result = ApplyResult.ERROR

@@ -17,6 +17,8 @@ from openhunt.config import (
     get_llm_config,
     set_llm_config,
     reset_llm_config,
+    get_letter_strategy,
+    set_letter_strategy,
     invalidate_config_cache,
     CONFIG_PATH,
     OPENHUNT_DIR,
@@ -139,4 +141,25 @@ def test_reset_llm_config_preserves_other_settings():
     set_default_resume("abc123")
     set_llm_config("openrouter", "sk-key", "gpt-4")
     reset_llm_config()
+    assert get_default_resume() == "abc123"
+
+
+def test_get_letter_strategy_empty():
+    assert get_letter_strategy() is None
+
+
+def test_set_and_get_letter_strategy():
+    set_letter_strategy("auto")
+    assert get_letter_strategy() == "auto"
+
+
+def test_overwrite_letter_strategy():
+    set_letter_strategy("llm")
+    set_letter_strategy("template")
+    assert get_letter_strategy() == "template"
+
+
+def test_letter_strategy_preserves_other_settings():
+    set_default_resume("abc123")
+    set_letter_strategy("auto")
     assert get_default_resume() == "abc123"
