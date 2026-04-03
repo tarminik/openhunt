@@ -32,7 +32,15 @@ def login() -> None:
     "--letter",
     type=click.Choice(["off", "template", "llm", "auto"], case_sensitive=False),
     default=None,
-    help="Стратегия сопроводительного письма (off/template/llm/auto).",
+    help=(
+        "Стратегия сопроводительного письма: "
+        "off — не заполнять (шаблон если обязательно), "
+        "template — всегда шаблон, "
+        "llm — генерация через LLM, "
+        "auto — пропустить если необязательно, LLM/шаблон если обязательно. "
+        "По умолчанию: llm если LLM настроен, иначе template. "
+        "Сохранить: openhunt letter strategy <режим>."
+    ),
 )
 def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool, letter: str | None) -> None:
     """Автоматически откликнуться на вакансии."""
