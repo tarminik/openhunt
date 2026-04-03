@@ -263,7 +263,14 @@ def _try_apply(
             human_delay(0.3, 0.5)
         return ApplyResult.ERROR
 
-    # --- Fallback: post-apply page with letter submit ---
+    # --- Fallback: post-apply page with inline letter form ---
+    if page.query_selector(selectors.RESPONSE_LETTER_SUBMIT):
+        return ApplyResult.APPLIED
+
+    # Some flows render success text or inline forms with a delay — retry once
+    human_delay(1.5, 2.5)
+    if _page_has_success_text(page):
+        return ApplyResult.APPLIED
     if page.query_selector(selectors.RESPONSE_LETTER_SUBMIT):
         return ApplyResult.APPLIED
 
