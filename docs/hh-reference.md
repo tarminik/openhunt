@@ -59,6 +59,17 @@ Operator priority: `NOT` > `AND` > `OR`. Use parentheses to override.
 | Applications list | `https://hh.ru/applicant/negotiations` |
 | Messages | `https://hh.ru/applicant/negotiations#702` |
 
+## Apply Flows
+
+When clicking "Откликнуться" on a vacancy, hh.ru has several flows:
+
+1. **Simple** — resume sent immediately, page shows "Резюме доставлено" / "Отклик отправлен"
+2. **Popup (optional letter)** — modal with resume selector + optional cover letter textarea → submit
+3. **Popup (required letter)** — same modal but the letter field is mandatory (text contains "обязательн" + "сопроводительное")
+4. **Questionnaire** — redirects to a page with employer questions ("Ответьте на вопросы")
+
+The cover letter input field uses `data-qa='vacancy-response-popup-form-letter-input'`. It appears in flows 2 and 3. In flow 2 it may or may not be visible. We fill the template whenever the field is present and visible — both required and optional cases.
+
 ## Useful Articles
 
 - [Search query language](https://hh.ru/article/25295) — full reference for query operators

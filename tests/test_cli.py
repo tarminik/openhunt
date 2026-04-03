@@ -100,6 +100,42 @@ def test_apply_explicit_resume_overrides_default(tmp_path, monkeypatch):
     assert captured["resume_id"] == "explicit_id"
 
 
+def test_letter_show_default(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["letter", "show"])
+    assert result.exit_code == 0
+    assert "Здравствуйте" in result.output
+
+
+def test_letter_set_and_show(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["letter", "set", "Мой текст"])
+    assert result.exit_code == 0
+    assert "сохранён" in result.output
+
+    result = runner.invoke(main, ["letter", "show"])
+    assert "Мой текст" in result.output
+
+
+def test_letter_reset(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    runner.invoke(main, ["letter", "set", "Мой текст"])
+    result = runner.invoke(main, ["letter", "reset"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(main, ["letter", "show"])
+    assert "Здравствуйте" in result.output
+
+
 def test_query_save_and_list(tmp_path, monkeypatch):
     monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
     monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")

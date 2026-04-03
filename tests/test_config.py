@@ -7,6 +7,10 @@ from openhunt.config import (
     save_config,
     get_default_resume,
     set_default_resume,
+    get_cover_letter,
+    set_cover_letter,
+    reset_cover_letter,
+    DEFAULT_COVER_LETTER,
     get_saved_queries,
     save_query,
     delete_query,
@@ -81,3 +85,18 @@ def test_overwrite_default_resume():
     set_default_resume("old_id")
     set_default_resume("new_id")
     assert get_default_resume() == "new_id"
+
+
+def test_get_cover_letter_default():
+    assert get_cover_letter() == DEFAULT_COVER_LETTER
+
+
+def test_set_cover_letter():
+    set_cover_letter("Мой текст")
+    assert get_cover_letter() == "Мой текст"
+
+
+def test_reset_cover_letter():
+    set_cover_letter("Мой текст")
+    reset_cover_letter()
+    assert get_cover_letter() == DEFAULT_COVER_LETTER

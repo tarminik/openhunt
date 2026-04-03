@@ -73,19 +73,26 @@ def _select_resume_in_popup(page: Page, resume_id: str) -> None:
     )
 
 
-def _try_apply(page: Page, vacancy_url: str, resume_id: str) -> str:
+def _fill_cover_letter(page: Page, cover_letter: str) -> None:
+    """Fill the cover letter field if present and visible in the current popup."""
+    letter_input = page.query_selector(selectors.RESPONSE_POPUP_LETTER_INPUT)
+    if letter_input and letter_input.is_visible():
+        letter_input.fill(cover_letter)
+        human_delay(0.3, 0.6)
+
+
+def _try_apply(page: Page, vacancy_url: str, resume_id: str, cover_letter: str) -> str:
     """Try to apply to a single vacancy.
 
     hh.ru has several apply flows:
     1. Simple: click apply → resume sent immediately ("Резюме доставлено")
     2. Popup (optional letter): click apply → modal with resume + optional letter → submit
-    3. Popup (required letter): click apply → modal with required letter → skip
+    3. Popup (required letter): click apply → modal with required letter → fill template → submit
     4. Questionnaire: click apply → form with employer questions → skip
 
     Returns:
         "applied" — successfully applied
         "already_applied" — already applied to this vacancy
-        "cover_letter" — requires a mandatory cover letter
         "questionnaire" — has required questions from employer
         "error" — unexpected error
     """
@@ -118,25 +125,23 @@ def _try_apply(page: Page, vacancy_url: str, resume_id: str) -> str:
         page.go_back()
         return "questionnaire"
 
-    # --- Flows 2 & 3: Popup modal ---
+    # --- Flows 2 & 3: Popup modal (optional or required letter) ---
     popup_submit = page.query_selector(selectors.RESPONSE_POPUP_SUBMIT)
     if popup_submit:
-        # Check if cover letter is required
-        dialog = page.query_selector("[role='dialog']")
-        if dialog and dialog.is_visible():
-            dialog_text = dialog.inner_text()
-            if selectors.COVER_LETTER_REQUIRED_TEXT in dialog_text.lower() and selectors.COVER_LETTER_KEYWORD_TEXT in dialog_text.lower():
-                # Close the popup and skip
-                close_btn = page.query_selector(selectors.RESPONSE_POPUP_CLOSE)
-                if close_btn:
-                    close_btn.click()
-                    human_delay(0.3, 0.5)
-                return "cover_letter"
-
-        # Optional or no cover letter — submit
+        _fill_cover_letter(page, cover_letter)
         popup_submit.click()
         human_delay(1.0, 2.0)
-        return "applied"
+
+        # Verify submission succeeded
+        body = page.inner_text("body")
+        if selectors.RESPONSE_DELIVERED_TEXT in body or selectors.RESPONSE_SENT_TEXT in body:
+            return "applied"
+        # Popup still open — submission failed (e.g. validation error)
+        close_btn = page.query_selector(selectors.RESPONSE_POPUP_CLOSE)
+        if close_btn:
+            close_btn.click()
+            human_delay(0.3, 0.5)
+        return "error"
 
     # --- Fallback: post-apply page with letter submit ---
     if page.query_selector(selectors.RESPONSE_LETTER_SUBMIT):
@@ -152,6 +157,7 @@ def apply_to_vacancies(
     recommended: bool,
     resume_id: str,
     limit: int,
+    cover_letter: str = "",
 ) -> None:
     """Main apply loop."""
     with browser_context(headless=True) as (context, page):
@@ -160,7 +166,7 @@ def apply_to_vacancies(
             return
 
         applied = 0
-        skipped = {"already_applied": 0, "cover_letter": 0, "questionnaire": 0, "error": 0}
+        skipped = {"already_applied": 0, "questionnaire": 0, "error": 0}
         page_num = 0
 
         if recommended:
@@ -190,7 +196,7 @@ def apply_to_vacancies(
                     break
 
                 try:
-                    result = _try_apply(page, link, resume_id)
+                    result = _try_apply(page, link, resume_id, cover_letter)
                 except Exception as e:
                     click.echo(f"  ! Ошибка: {e}")
                     result = "error"
@@ -203,7 +209,6 @@ def apply_to_vacancies(
                     skipped[result] += 1
                     reason = {
                         "already_applied": "уже откликались",
-                        "cover_letter": "требуется сопроводительное",
                         "questionnaire": "требуется анкета",
                         "error": "ошибка",
                     }.get(result, result)
@@ -226,8 +231,6 @@ def apply_to_vacancies(
             click.echo(f"  Пропущено: {total_skipped}")
             if skipped["already_applied"]:
                 click.echo(f"    Уже откликались: {skipped['already_applied']}")
-            if skipped["cover_letter"]:
-                click.echo(f"    Требуется сопроводительное: {skipped['cover_letter']}")
             if skipped["questionnaire"]:
                 click.echo(f"    Требуется анкета: {skipped['questionnaire']}")
             if skipped["error"]:

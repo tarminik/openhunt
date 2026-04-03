@@ -38,6 +38,27 @@ def set_default_resume(resume_id: str) -> None:
     save_config(config)
 
 
+DEFAULT_COVER_LETTER = (
+    "Здравствуйте. Меня заинтересовала вакансия. Хотел бы обсудить подробнее."
+)
+
+
+def get_cover_letter() -> str:
+    return load_config().get("cover_letter", DEFAULT_COVER_LETTER)
+
+
+def set_cover_letter(text: str) -> None:
+    config = load_config()
+    config["cover_letter"] = text
+    save_config(config)
+
+
+def reset_cover_letter() -> None:
+    config = load_config()
+    config.pop("cover_letter", None)
+    save_config(config)
+
+
 def get_saved_queries() -> dict[str, str]:
     return load_config().get("queries", {})
 

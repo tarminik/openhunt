@@ -26,7 +26,7 @@ def login() -> None:
 def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int) -> None:
     """Автоматически откликнуться на вакансии."""
     from openhunt.browser.actions.apply import apply_to_vacancies
-    from openhunt.config import get_default_resume, get_saved_queries
+    from openhunt.config import get_cover_letter, get_default_resume, get_saved_queries
 
     if resume is None:
         resume = get_default_resume()
@@ -53,6 +53,7 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
         recommended=recommended,
         resume_id=resume,
         limit=limit,
+        cover_letter=get_cover_letter(),
     )
 
 
@@ -91,6 +92,40 @@ def resume_raise() -> None:
     from openhunt.browser.actions.resume import raise_resume
 
     raise_resume()
+
+
+@main.group()
+def letter() -> None:
+    """Управление сопроводительным письмом."""
+
+
+@letter.command("show")
+def letter_show() -> None:
+    """Показать текущий шаблон сопроводительного письма."""
+    from openhunt.config import get_cover_letter
+
+    click.echo(get_cover_letter())
+
+
+@letter.command("set")
+@click.argument("text")
+def letter_set(text: str) -> None:
+    """Задать свой шаблон: openhunt letter set "текст письма"."""
+    from openhunt.config import set_cover_letter
+
+    if not text.strip():
+        raise click.UsageError("Текст письма не может быть пустым.")
+    set_cover_letter(text.strip())
+    click.echo("Шаблон сохранён.")
+
+
+@letter.command("reset")
+def letter_reset() -> None:
+    """Вернуть шаблон по умолчанию."""
+    from openhunt.config import reset_cover_letter
+
+    reset_cover_letter()
+    click.echo("Шаблон сброшен на значение по умолчанию.")
 
 
 @main.group()
