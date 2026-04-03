@@ -1,11 +1,19 @@
 """Tests for CLI argument validation."""
 
+import pytest
 from click.testing import CliRunner
 
 from openhunt.cli import main
+from openhunt.config import invalidate_config_cache
 
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _clear_config_cache():
+    """Invalidate config cache before each test to avoid stale data."""
+    invalidate_config_cache()
 
 
 def test_version():

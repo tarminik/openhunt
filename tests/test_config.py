@@ -17,6 +17,7 @@ from openhunt.config import (
     get_llm_config,
     set_llm_config,
     reset_llm_config,
+    invalidate_config_cache,
     CONFIG_PATH,
     OPENHUNT_DIR,
 )
@@ -25,6 +26,7 @@ from openhunt.config import (
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path, monkeypatch):
     """Redirect config to a temp directory for each test."""
+    invalidate_config_cache()
     fake_dir = tmp_path / ".openhunt"
     monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", fake_dir)
     monkeypatch.setattr("openhunt.config.BROWSER_DIR", fake_dir / "browser")

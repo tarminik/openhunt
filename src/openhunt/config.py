@@ -9,17 +9,29 @@ OPENHUNT_DIR = Path.home() / ".openhunt"
 BROWSER_DIR = OPENHUNT_DIR / "browser"
 CONFIG_PATH = OPENHUNT_DIR / "config.toml"
 
+_config_cache: dict | None = None
+
 
 def ensure_dirs() -> None:
     OPENHUNT_DIR.mkdir(mode=0o700, exist_ok=True)
     BROWSER_DIR.mkdir(mode=0o700, exist_ok=True)
 
 
+def invalidate_config_cache() -> None:
+    """Reset the in-memory config cache, forcing the next load_config() to read from disk."""
+    global _config_cache
+    _config_cache = None
+
+
 def load_config() -> dict:
+    global _config_cache
+    if _config_cache is not None:
+        return _config_cache
     if not CONFIG_PATH.exists():
         return {}
     with open(CONFIG_PATH, "rb") as f:
-        return tomllib.load(f)
+        _config_cache = tomllib.load(f)
+    return _config_cache
 
 
 def save_config(config: dict) -> None:
@@ -27,6 +39,7 @@ def save_config(config: dict) -> None:
     with open(CONFIG_PATH, "wb") as f:
         tomli_w.dump(config, f)
     CONFIG_PATH.chmod(0o600)
+    invalidate_config_cache()
 
 
 def get_default_resume() -> str | None:
