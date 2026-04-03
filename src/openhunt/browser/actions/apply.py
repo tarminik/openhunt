@@ -111,6 +111,7 @@ def _try_apply(
     resume_id: str,
     cover_letter: str,
     use_llm: bool = False,
+    dry_run: bool = False,
 ) -> str:
     """Try to apply to a single vacancy.
 
@@ -121,7 +122,7 @@ def _try_apply(
     4. Questionnaire: click apply → form with employer questions → skip
 
     Returns:
-        "applied" — successfully applied
+        "applied" — successfully applied (or would apply in dry-run)
         "already_applied" — already applied to this vacancy
         "questionnaire" — has required questions from employer
         "error" — unexpected error
@@ -132,7 +133,7 @@ def _try_apply(
     # Extract vacancy info early (before clicking apply changes the page).
     # The actual LLM call is deferred until we know a letter field is present.
     vacancy_title, vacancy_text = "", ""
-    if use_llm:
+    if use_llm or dry_run:
         vacancy_title, vacancy_text = _extract_vacancy_info(page)
 
     # Find the apply button
@@ -143,6 +144,9 @@ def _try_apply(
     btn_text = apply_btn.inner_text().strip()
     if btn_text != selectors.APPLY_BUTTON_TEXT:
         return "already_applied"
+
+    if dry_run:
+        return "applied"
 
     apply_btn.click()
     human_delay(1.5, 2.5)
@@ -200,6 +204,7 @@ def apply_to_vacancies(
     limit: int,
     cover_letter: str = "",
     use_llm: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """Main apply loop."""
     with browser_context(headless=True) as (context, page):
@@ -210,6 +215,9 @@ def apply_to_vacancies(
         applied = 0
         skipped = {"already_applied": 0, "questionnaire": 0, "error": 0}
         page_num = 0
+
+        if dry_run:
+            click.echo("[dry-run] Пробный запуск — отклики не отправляются.\n")
 
         if recommended:
             click.echo("Отклики на рекомендованные вакансии...")
@@ -238,15 +246,18 @@ def apply_to_vacancies(
                     break
 
                 try:
-                    result = _try_apply(page, link, resume_id, cover_letter, use_llm)
+                    result = _try_apply(page, link, resume_id, cover_letter, use_llm, dry_run)
                 except Exception as e:
                     click.echo(f"  ! Ошибка: {e}")
                     result = "error"
 
                 if result == "applied":
                     applied += 1
-                    click.echo(f"  [{applied}/{limit}] Откликнулся: {link}")
-                    human_delay(2.0, 4.0)
+                    if dry_run:
+                        click.echo(f"  [{applied}/{limit}] Откликнулся бы: {link}")
+                    else:
+                        click.echo(f"  [{applied}/{limit}] Откликнулся: {link}")
+                        human_delay(2.0, 4.0)
                 else:
                     skipped[result] += 1
                     reason = {
@@ -268,7 +279,10 @@ def apply_to_vacancies(
         # Report
         total_skipped = sum(skipped.values())
         click.echo(f"\nГотово!")
-        click.echo(f"  Откликов отправлено: {applied}")
+        if dry_run:
+            click.echo(f"  Доступно для отклика: {applied}")
+        else:
+            click.echo(f"  Откликов отправлено: {applied}")
         if total_skipped > 0:
             click.echo(f"  Пропущено: {total_skipped}")
             if skipped["already_applied"]:

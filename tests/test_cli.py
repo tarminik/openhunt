@@ -226,6 +226,27 @@ def test_llm_show_empty(tmp_path, monkeypatch):
     assert "не настроен" in result.output
 
 
+def test_apply_dry_run_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+
+    # Without --dry-run
+    runner.invoke(main, ["apply", "--query", "python"])
+    assert captured["dry_run"] is False
+
+    # With --dry-run
+    runner.invoke(main, ["apply", "--query", "python", "--dry-run"])
+    assert captured["dry_run"] is True
+
+
 def test_apply_passes_use_llm_flag(tmp_path, monkeypatch):
     monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
     monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")

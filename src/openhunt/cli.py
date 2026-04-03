@@ -23,7 +23,8 @@ def login() -> None:
 @click.option("--recommended", "-r", is_flag=True, help="Откликаться на рекомендованные вакансии.")
 @click.option("--resume", type=str, help="ID резюме на hh.ru (если не указан, используется сохранённый).")
 @click.option("--limit", "-l", type=int, default=10, show_default=True, help="Максимум откликов.")
-def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int) -> None:
+@click.option("--dry-run", is_flag=True, help="Показать вакансии без отправки откликов.")
+def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool) -> None:
     """Автоматически откликнуться на вакансии."""
     from openhunt.browser.actions.apply import apply_to_vacancies
     from openhunt.config import get_cover_letter, get_default_resume, get_llm_config, get_saved_queries
@@ -57,6 +58,7 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
         limit=limit,
         cover_letter=get_cover_letter(),
         use_llm=use_llm,
+        dry_run=dry_run,
     )
 
 
