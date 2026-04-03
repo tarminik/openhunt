@@ -21,15 +21,15 @@ CLI-инструмент для автоматизации поиска рабо
 Требуется Python 3.12+.
 
 ```bash
-uv tool install openhunt
+uv tool install openhunt-cli
 ```
 
 Или через pipx / pip:
 
 ```bash
-pipx install openhunt
+pipx install openhunt-cli
 # или
-pip install openhunt
+pip install openhunt-cli
 ```
 
 Браузер Chromium установится автоматически при первом запуске.
