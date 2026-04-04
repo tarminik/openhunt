@@ -98,3 +98,36 @@ def test_returns_none_for_custom_without_base_url(monkeypatch):
 
     result = generate_cover_letter("Title", "Description")
     assert result is None
+
+
+def test_codex_uses_responses_api(monkeypatch):
+    from openhunt.config import set_llm_config
+    set_llm_config("codex", model="gpt-5.4")
+
+    mock_content = MagicMock()
+    mock_content.type = "output_text"
+    mock_content.text = "Codex-письмо."
+
+    mock_message = MagicMock()
+    mock_message.type = "message"
+    mock_message.content = [mock_content]
+
+    mock_response = MagicMock()
+    mock_response.output = [mock_message]
+
+    with patch("openhunt.auth.get_valid_codex_token", return_value="fake-token"):
+        with patch("openhunt.llm.OpenAI") as mock_cls:
+            mock_cls.return_value.responses.create.return_value = mock_response
+            result = generate_cover_letter("Dev", "Описание")
+
+    assert result == "Codex-письмо."
+
+
+def test_codex_returns_none_without_token(monkeypatch):
+    from openhunt.config import set_llm_config
+    set_llm_config("codex", model="gpt-5.4")
+
+    with patch("openhunt.auth.get_valid_codex_token", return_value=None):
+        result = generate_cover_letter("Dev", "Описание")
+
+    assert result is None

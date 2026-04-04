@@ -300,10 +300,11 @@ wheels = [
 
 [[package]]
 name = "openhunt-cli"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "httpx" },
     { name = "openai" },
     { name = "playwright" },
     { name = "textual" },
@@ -318,6 +319,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.0" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "openai", specifier = ">=1.0" },
     { name = "playwright", specifier = ">=1.50" },
     { name = "textual", specifier = ">=3.0" },

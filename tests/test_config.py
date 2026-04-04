@@ -22,6 +22,9 @@ from openhunt.config import (
     invalidate_config_cache,
     CONFIG_PATH,
     OPENHUNT_DIR,
+    get_codex_tokens,
+    save_codex_tokens,
+    reset_codex_tokens,
 )
 
 
@@ -33,6 +36,7 @@ def isolated_config(tmp_path, monkeypatch):
     monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", fake_dir)
     monkeypatch.setattr("openhunt.config.BROWSER_DIR", fake_dir / "browser")
     monkeypatch.setattr("openhunt.config.CONFIG_PATH", fake_dir / "config.toml")
+    monkeypatch.setattr("openhunt.config.AUTH_PATH", fake_dir / "auth.json")
 
 
 def test_load_empty_config():
@@ -163,3 +167,44 @@ def test_letter_strategy_preserves_other_settings():
     set_default_resume("abc123")
     set_letter_strategy("auto")
     assert get_default_resume() == "abc123"
+
+
+# --- Codex LLM config (no api_key) ---
+
+
+def test_set_codex_llm_config():
+    set_llm_config("codex", model="gpt-5.4")
+    config = get_llm_config()
+    assert config is not None
+    assert config["provider"] == "codex"
+    assert config["model"] == "gpt-5.4"
+    assert "api_key" not in config
+
+
+def test_codex_config_does_not_require_api_key():
+    set_llm_config("codex", model="gpt-5.4")
+    assert get_llm_config() is not None
+
+
+def test_non_codex_requires_api_key():
+    set_llm_config("openrouter", model="gpt-4")
+    assert get_llm_config() is None  # no api_key → None
+
+
+# --- Auth token storage ---
+
+
+def test_codex_tokens_roundtrip():
+    save_codex_tokens("access", "refresh")
+    tokens = get_codex_tokens()
+    assert tokens == {"access_token": "access", "refresh_token": "refresh"}
+
+
+def test_codex_tokens_empty():
+    assert get_codex_tokens() is None
+
+
+def test_reset_codex_tokens():
+    save_codex_tokens("a", "b")
+    reset_codex_tokens()
+    assert get_codex_tokens() is None

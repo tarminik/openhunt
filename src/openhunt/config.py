@@ -1,6 +1,7 @@
 """User configuration and data directory management."""
 
 import copy
+import json
 import tomllib
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import tomli_w
 OPENHUNT_DIR = Path.home() / ".openhunt"
 BROWSER_DIR = OPENHUNT_DIR / "browser"
 CONFIG_PATH = OPENHUNT_DIR / "config.toml"
+AUTH_PATH = OPENHUNT_DIR / "auth.json"
 
 _config_cache: dict | None = None
 
@@ -87,23 +89,27 @@ def save_query(name: str, query: str) -> None:
 def get_llm_config() -> dict | None:
     """Return LLM config dict or None if not configured.
 
-    Returns None if required fields (api_key, model, provider) are missing.
+    For codex provider, only model and provider are required (auth via OAuth).
+    For other providers, api_key is also required.
     """
     config = load_config()
     llm = config.get("llm")
     if not llm:
         return None
-    required = ("api_key", "model", "provider")
-    if not all(llm.get(k) for k in required):
+    if not llm.get("provider") or not llm.get("model"):
+        return None
+    if llm["provider"] != "codex" and not llm.get("api_key"):
         return None
     return llm
 
 
 def set_llm_config(
-    provider: str, api_key: str, model: str, base_url: str | None = None
+    provider: str, api_key: str | None = None, model: str = "", base_url: str | None = None,
 ) -> None:
     config = load_config()
-    llm: dict = {"provider": provider, "api_key": api_key, "model": model}
+    llm: dict = {"provider": provider, "model": model}
+    if api_key:
+        llm["api_key"] = api_key
     if base_url:
         llm["base_url"] = base_url
     config["llm"] = llm
@@ -137,3 +143,48 @@ def delete_query(name: str) -> bool:
         save_config(config)
         return True
     return False
+
+
+# --- Auth token storage (auth.json) ---
+
+
+def load_auth() -> dict:
+    """Load auth tokens from auth.json."""
+    if not AUTH_PATH.exists():
+        return {}
+    with open(AUTH_PATH) as f:
+        return json.load(f)
+
+
+def save_auth(auth: dict) -> None:
+    """Save auth tokens to auth.json with restricted permissions."""
+    ensure_dirs()
+    with open(AUTH_PATH, "w") as f:
+        json.dump(auth, f, indent=2)
+    AUTH_PATH.chmod(0o600)
+
+
+def get_codex_tokens() -> dict | None:
+    """Return codex tokens dict or None if not stored."""
+    auth = load_auth()
+    tokens = auth.get("codex")
+    if not tokens or not tokens.get("access_token") or not tokens.get("refresh_token"):
+        return None
+    return tokens
+
+
+def save_codex_tokens(access_token: str, refresh_token: str) -> None:
+    """Save codex OAuth tokens."""
+    auth = load_auth()
+    auth["codex"] = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }
+    save_auth(auth)
+
+
+def reset_codex_tokens() -> None:
+    """Remove codex tokens from auth store."""
+    auth = load_auth()
+    auth.pop("codex", None)
+    save_auth(auth)

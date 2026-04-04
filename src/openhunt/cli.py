@@ -245,35 +245,49 @@ def llm() -> None:
 @llm.command("setup")
 @click.option(
     "--provider", "-p", required=True,
-    type=click.Choice(["openrouter", "custom"]),
+    type=click.Choice(["openrouter", "codex", "custom"]),
     help="LLM-провайдер.",
 )
-@click.option("--api-key", "-k", required=True, help="API-ключ.")
+@click.option("--api-key", "-k", type=str, default=None, help="API-ключ (не нужен для codex).")
 @click.option("--model", "-m", required=True, help="Название модели.")
 @click.option("--base-url", "-u", type=str, default=None, help="Base URL (только для custom).")
-def llm_setup(provider: str, api_key: str, model: str, base_url: str | None) -> None:
+def llm_setup(provider: str, api_key: str | None, model: str, base_url: str | None) -> None:
     """Настроить LLM-провайдер."""
     from openhunt.config import set_llm_config
 
     if provider == "custom" and not base_url:
         raise click.UsageError("Для custom-провайдера укажите --base-url.")
+    if provider != "codex" and not api_key:
+        raise click.UsageError("Укажите --api-key для этого провайдера.")
+    if provider == "codex" and api_key:
+        click.echo("Codex использует OAuth, --api-key игнорируется.")
+        api_key = None
     set_llm_config(provider, api_key, model, base_url)
     click.echo(f"LLM настроен: {provider}, модель {model}")
+    if provider == "codex":
+        from openhunt.config import get_codex_tokens
+
+        if not get_codex_tokens():
+            click.echo("Для авторизации выполните: openhunt codex login")
 
 
 @llm.command("show")
 def llm_show() -> None:
     """Показать текущие настройки LLM."""
-    from openhunt.config import get_llm_config
+    from openhunt.config import get_codex_tokens, get_llm_config
 
     config = get_llm_config()
     if not config:
         click.echo("LLM не настроен. Используйте: openhunt llm setup")
         return
     click.echo(f"  Провайдер: {config['provider']}")
-    key = config["api_key"]
-    masked = key[:4] + "..." + key[-4:] if len(key) > 8 else "***"
-    click.echo(f"  API-ключ:  {masked}")
+    if config.get("api_key"):
+        key = config["api_key"]
+        masked = key[:4] + "..." + key[-4:] if len(key) > 8 else "***"
+        click.echo(f"  API-ключ:  {masked}")
+    elif config["provider"] == "codex":
+        status = "авторизован" if get_codex_tokens() else "не авторизован"
+        click.echo(f"  OAuth:     {status}")
     click.echo(f"  Модель:    {config['model']}")
     if config.get("base_url"):
         click.echo(f"  Base URL:  {config['base_url']}")
@@ -298,6 +312,46 @@ def query_delete(name: str) -> None:
         click.echo(f"Запрос '{name}' удалён.")
     else:
         click.echo(f"Запрос '{name}' не найден.")
+
+
+@main.group()
+def codex() -> None:
+    """Управление авторизацией OpenAI Codex."""
+
+
+@codex.command("login")
+def codex_login_cmd() -> None:
+    """Авторизоваться в OpenAI Codex (OAuth, откроется браузер)."""
+    from openhunt.auth import codex_login
+
+    codex_login()
+
+
+@codex.command("logout")
+def codex_logout_cmd() -> None:
+    """Удалить сохранённые токены Codex."""
+    from openhunt.config import reset_codex_tokens
+
+    reset_codex_tokens()
+    click.echo("Токены Codex удалены.")
+
+
+@codex.command("status")
+def codex_status_cmd() -> None:
+    """Показать статус авторизации Codex."""
+    from openhunt.config import get_codex_tokens
+
+    tokens = get_codex_tokens()
+    if not tokens:
+        click.echo("Не авторизован. Выполните: openhunt codex login")
+        return
+
+    from openhunt.auth import _is_token_expired
+
+    if _is_token_expired(tokens["access_token"]):
+        click.echo("Токен истёк, будет обновлён автоматически при использовании.")
+    else:
+        click.echo("Авторизован, токен действителен.")
 
 
 if __name__ == "__main__":

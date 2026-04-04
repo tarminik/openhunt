@@ -9,6 +9,8 @@ PROVIDER_URLS = {
     "openrouter": "https://openrouter.ai/api/v1",
 }
 
+CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
+
 SYSTEM_PROMPT = """\
 Напиши сопроводительное письмо на русском языке для отклика на вакансию.
 
@@ -46,6 +48,10 @@ def _get_client() -> OpenAI | None:
         return None
 
     provider = llm_config.get("provider", "custom")
+
+    if provider == "codex":
+        return _get_codex_client()
+
     base_url = llm_config.get("base_url") or PROVIDER_URLS.get(provider)
     if not base_url:
         click.echo("  ! LLM: не указан base_url для кастомного провайдера.")
@@ -62,6 +68,86 @@ def _get_client() -> OpenAI | None:
     except Exception as e:
         click.echo(f"  ! LLM ошибка: {e}")
         return None
+
+
+def _get_codex_client() -> OpenAI | None:
+    """Return an OpenAI client configured for Codex with a valid OAuth token."""
+    global _client, _client_config_key
+
+    from openhunt.auth import get_valid_codex_token
+
+    token = get_valid_codex_token()
+    if not token:
+        click.echo("  ! Codex: нет валидного токена. Выполните 'openhunt codex login'.")
+        return None
+
+    # Token changes on refresh, so always check
+    config_key = ("codex", token[:16])
+    if _client is not None and _client_config_key == config_key:
+        return _client
+
+    try:
+        _client = OpenAI(base_url=CODEX_BASE_URL, api_key=token)
+        _client_config_key = config_key
+        return _client
+    except Exception as e:
+        click.echo(f"  ! Codex ошибка: {e}")
+        return None
+
+
+def _build_user_message(
+    vacancy_title: str,
+    vacancy_text: str,
+    profile_text: str = "",
+    user_name: str = "",
+) -> str:
+    parts = []
+    if user_name:
+        parts.append(f"Имя соискателя: {user_name}")
+    if profile_text:
+        parts.append(f"Профиль соискателя:\n{profile_text}")
+    parts.append(f"Вакансия: {vacancy_title}\n\n{vacancy_text}")
+    return "\n\n".join(parts)
+
+
+def _generate_via_chat_completions(
+    client: OpenAI, model: str, user_message: str,
+) -> str | None:
+    """Generate using the standard chat completions API."""
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        max_tokens=1024,
+        temperature=0.7,
+    )
+    if not response.choices:
+        return None
+    content = response.choices[0].message.content
+    return content.strip() if content else None
+
+
+def _generate_via_responses(
+    client: OpenAI, model: str, user_message: str,
+) -> str | None:
+    """Generate using the OpenAI Responses API (Codex)."""
+    response = client.responses.create(
+        model=model,
+        instructions=SYSTEM_PROMPT,
+        input=[{"role": "user", "content": user_message}],
+        max_output_tokens=1024,
+        temperature=0.7,
+        store=False,
+    )
+    # Responses API returns output items
+    for item in response.output:
+        if item.type == "message":
+            for content in item.content:
+                if content.type == "output_text":
+                    return content.text.strip()
+    return None
 
 
 def generate_cover_letter(
@@ -83,27 +169,15 @@ def generate_cover_letter(
         return None
 
     try:
-        parts = []
-        if user_name:
-            parts.append(f"Имя соискателя: {user_name}")
-        if profile_text:
-            parts.append(f"Профиль соискателя:\n{profile_text}")
-        parts.append(f"Вакансия: {vacancy_title}\n\n{vacancy_text}")
-        user_message = "\n\n".join(parts)
-
-        response = client.chat.completions.create(
-            model=llm_config["model"],
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            max_tokens=1024,
-            temperature=0.7,
+        user_message = _build_user_message(
+            vacancy_title, vacancy_text, profile_text, user_name,
         )
-        if not response.choices:
-            return None
-        content = response.choices[0].message.content
-        return content.strip() if content else None
+        provider = llm_config.get("provider", "custom")
+        model = llm_config["model"]
+
+        if provider == "codex":
+            return _generate_via_responses(client, model, user_message)
+        return _generate_via_chat_completions(client, model, user_message)
     except (OpenAIError, Exception) as e:
         click.echo(f"  ! LLM ошибка: {e}")
         return None
