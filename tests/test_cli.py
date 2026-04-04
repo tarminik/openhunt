@@ -3,6 +3,8 @@
 import pytest
 from click.testing import CliRunner
 
+from importlib.metadata import version
+
 from openhunt.cli import main
 from openhunt.config import invalidate_config_cache
 
@@ -19,7 +21,7 @@ def _clear_config_cache():
 def test_version():
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert version("openhunt-cli") in result.output
 
 
 def test_verbose_flag_accepted():
