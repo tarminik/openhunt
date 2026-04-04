@@ -5,6 +5,20 @@
 - **Python 3.12+**
 - **uv** — package manager, virtual environments, tool distribution
 
+## Distribution
+
+- **PyPI package**: `openhunt-cli` — https://pypi.org/project/openhunt-cli/
+- **Install**: `uv tool install openhunt-cli` or `pip install openhunt-cli`
+- **Build**: `uv build`
+- **Publish**: `uv publish` (uses PyPI token from `~/.pypirc` or `UV_PUBLISH_TOKEN`)
+
+### Release checklist
+
+1. Bump version in `pyproject.toml` AND `src/openhunt/__init__.py` (both must match)
+2. Commit and push
+3. `uv build`
+4. `uv publish`
+
 ## Core Dependencies
 
 | Library | Purpose |
@@ -12,12 +26,7 @@
 | **Playwright** | Browser automation (the only way to interact with hh.ru — API closed for job seekers) |
 | **Textual** | TUI framework for terminal interface |
 | **Click** | CLI argument parsing and commands |
-
-## Planned Dependencies
-
-| Library | Purpose |
-|---------|---------|
-| LLM SDK (TBD) | Cover letter generation, chat automation |
+| **OpenAI** | LLM cover letter generation (OpenRouter / custom OpenAI-compatible providers) |
 
 ## Playwright
 
