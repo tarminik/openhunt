@@ -1,8 +1,10 @@
 """OAuth 2.0 authentication for OpenAI Codex."""
 
 import base64
+import hashlib
 import json
-import threading
+import secrets
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -11,12 +13,10 @@ import click
 import httpx
 
 CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
-CODEX_AUTH_URL = "https://auth.openai.com/authorize"
+CODEX_AUTH_URL = "https://auth.openai.com/oauth/authorize"
 CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token"
-CODEX_AUDIENCE = "https://api.openai.com/v1"
-CODEX_SCOPES = "openid profile email offline_access"
-REDIRECT_PORT = 18539
-REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
+REDIRECT_PORT = 1455
+REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/auth/callback"
 TOKEN_EXPIRY_BUFFER = 120  # refresh 2 minutes before expiry
 
 
@@ -26,7 +26,6 @@ def _decode_jwt_payload(token: str) -> dict:
     if len(parts) != 3:
         return {}
     payload = parts[1]
-    # Fix base64 padding
     payload += "=" * (4 - len(payload) % 4)
     try:
         return json.loads(base64.urlsafe_b64decode(payload))
@@ -36,13 +35,19 @@ def _decode_jwt_payload(token: str) -> dict:
 
 def _is_token_expired(access_token: str) -> bool:
     """Check if JWT access token is expired or about to expire."""
-    import time
-
     payload = _decode_jwt_payload(access_token)
     exp = payload.get("exp")
     if not exp:
         return True
     return time.time() > (exp - TOKEN_EXPIRY_BUFFER)
+
+
+def _generate_pkce() -> tuple[str, str]:
+    """Generate PKCE code verifier and challenge."""
+    verifier = secrets.token_urlsafe(96)
+    digest = hashlib.sha256(verifier.encode()).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    return verifier, challenge
 
 
 def _exchange_code(code: str, code_verifier: str) -> dict:
@@ -75,6 +80,7 @@ def refresh_access_token(refresh_token: str) -> dict:
             "grant_type": "refresh_token",
             "client_id": CODEX_CLIENT_ID,
             "refresh_token": refresh_token,
+            "scope": "openid profile email",
         },
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         timeout=20,
@@ -83,33 +89,24 @@ def refresh_access_token(refresh_token: str) -> dict:
     return response.json()
 
 
-def _generate_pkce() -> tuple[str, str]:
-    """Generate PKCE code verifier and challenge."""
-    import hashlib
-    import secrets
-
-    verifier = secrets.token_urlsafe(32)
-    digest = hashlib.sha256(verifier.encode()).digest()
-    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
-    return verifier, challenge
-
-
 def codex_login() -> bool:
     """Run the full OAuth login flow for Codex. Returns True on success."""
     from openhunt.config import save_codex_tokens
 
     code_verifier, code_challenge = _generate_pkce()
-    state = base64.urlsafe_b64encode(__import__("os").urandom(16)).decode()
+    state = secrets.token_urlsafe(16)
 
     auth_params = urlencode({
-        "response_type": "code",
         "client_id": CODEX_CLIENT_ID,
+        "response_type": "code",
         "redirect_uri": REDIRECT_URI,
-        "scope": CODEX_SCOPES,
-        "audience": CODEX_AUDIENCE,
+        "scope": "openid email profile offline_access",
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
+        "prompt": "login",
+        "id_token_add_organizations": "true",
+        "codex_cli_simplified_flow": "true",
     })
     auth_url = f"{CODEX_AUTH_URL}?{auth_params}"
 
@@ -132,18 +129,20 @@ def codex_login() -> bool:
                 return
             result["code"] = params.get("code", [None])[0]
             self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write("Авторизация успешна! Можно закрыть эту вкладку.".encode())
+            self.wfile.write("Авторизация успешна! Можно закрыть эту вкладку.".encode("utf-8"))
 
         def log_message(self, format, *args):
             pass  # suppress HTTP logs
 
     try:
+        HTTPServer.allow_reuse_address = True
         server = HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
     except OSError as e:
         click.echo(f"Не удалось запустить OAuth-сервер на порту {REDIRECT_PORT}: {e}")
         return False
-    server.timeout = 120
+    server.timeout = 300
 
     click.echo("Открываю браузер для авторизации в OpenAI...")
     if not webbrowser.open(auth_url):
@@ -151,7 +150,6 @@ def codex_login() -> bool:
     click.echo(f"Если браузер не открылся, перейдите по ссылке:\n{auth_url}\n")
     click.echo("Ожидаю авторизацию...")
 
-    # Wait for single callback
     server.handle_request()
     server.server_close()
 
@@ -192,7 +190,6 @@ def get_valid_codex_token() -> str | None:
     if not _is_token_expired(access_token):
         return access_token
 
-    # Token expired — try to refresh
     try:
         new_tokens = refresh_access_token(tokens["refresh_token"])
     except Exception as e:
