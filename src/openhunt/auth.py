@@ -138,11 +138,16 @@ def codex_login() -> bool:
         def log_message(self, format, *args):
             pass  # suppress HTTP logs
 
-    server = HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
+    try:
+        server = HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
+    except OSError as e:
+        click.echo(f"Не удалось запустить OAuth-сервер на порту {REDIRECT_PORT}: {e}")
+        return False
     server.timeout = 120
 
     click.echo("Открываю браузер для авторизации в OpenAI...")
-    webbrowser.open(auth_url)
+    if not webbrowser.open(auth_url):
+        click.echo("Не удалось открыть браузер автоматически.")
     click.echo(f"Если браузер не открылся, перейдите по ссылке:\n{auth_url}\n")
     click.echo("Ожидаю авторизацию...")
 

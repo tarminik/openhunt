@@ -1,5 +1,7 @@
 """LLM-powered cover letter generation."""
 
+import hashlib
+
 import click
 from openai import OpenAI, OpenAIError
 
@@ -81,8 +83,8 @@ def _get_codex_client() -> OpenAI | None:
         click.echo("  ! Codex: нет валидного токена. Выполните 'openhunt codex login'.")
         return None
 
-    # Token changes on refresh, so always check
-    config_key = ("codex", token[:16])
+    # Token changes on refresh, so always check (full hash, not prefix — JWT prefixes are stable)
+    config_key = ("codex", hashlib.sha256(token.encode()).hexdigest())
     if _client is not None and _client_config_key == config_key:
         return _client
 

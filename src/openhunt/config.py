@@ -149,11 +149,14 @@ def delete_query(name: str) -> bool:
 
 
 def load_auth() -> dict:
-    """Load auth tokens from auth.json."""
+    """Load auth tokens from auth.json. Returns empty dict on corrupted file."""
     if not AUTH_PATH.exists():
         return {}
-    with open(AUTH_PATH) as f:
-        return json.load(f)
+    try:
+        with open(AUTH_PATH) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, ValueError):
+        return {}
 
 
 def save_auth(auth: dict) -> None:
