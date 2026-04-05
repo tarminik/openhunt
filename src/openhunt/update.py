@@ -156,7 +156,9 @@ def check_and_update() -> None:
     click.echo(f"  Обновляю...", err=True)
 
     if _run_upgrade(cmd):
-        click.echo(f"  Обновлено до {latest}. Перезапустите команду.", err=True)
-        raise SystemExit(0)
+        click.echo(f"  Обновлено до {latest}.\n", err=True)
+        # Re-exec the same command with the updated binary
+        import os
+        os.execvp(sys.argv[0], sys.argv)
     else:
         click.echo(f"  Не удалось обновить. Обновите вручную: {cmd}", err=True)

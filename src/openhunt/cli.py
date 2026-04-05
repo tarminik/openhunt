@@ -21,8 +21,6 @@ def main(ctx: click.Context, verbose: bool, no_update: bool) -> None:
 
             try:
                 check_and_update()
-            except SystemExit:
-                raise
             except Exception:
                 pass  # never let update check break the CLI
 
