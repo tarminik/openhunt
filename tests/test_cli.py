@@ -418,3 +418,139 @@ def test_query_list_empty(tmp_path, monkeypatch):
     result = runner.invoke(main, ["query", "list"])
     assert result.exit_code == 0
     assert "Нет сохранённых запросов" in result.output
+
+
+# --- Exclude patterns CLI ---
+
+
+def test_exclude_add_and_list(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["exclude", "add", "стажёр|intern"])
+    assert result.exit_code == 0
+    assert "добавлен" in result.output
+
+    result = runner.invoke(main, ["exclude", "list"])
+    assert result.exit_code == 0
+    assert "стажёр|intern" in result.output
+
+
+def test_exclude_add_duplicate(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    runner.invoke(main, ["exclude", "add", "test"])
+    result = runner.invoke(main, ["exclude", "add", "test"])
+    assert "уже существует" in result.output
+
+
+def test_exclude_add_invalid_regex(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["exclude", "add", "[invalid"])
+    assert result.exit_code != 0
+
+
+def test_exclude_delete(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    runner.invoke(main, ["exclude", "add", "test"])
+    result = runner.invoke(main, ["exclude", "delete", "test"])
+    assert result.exit_code == 0
+    assert "удалён" in result.output
+
+    result = runner.invoke(main, ["exclude", "list"])
+    assert "Нет сохранённых" in result.output
+
+
+def test_exclude_clear(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    runner.invoke(main, ["exclude", "add", "one"])
+    runner.invoke(main, ["exclude", "add", "two"])
+    result = runner.invoke(main, ["exclude", "clear"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(main, ["exclude", "list"])
+    assert "Нет сохранённых" in result.output
+
+
+def test_exclude_list_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    result = runner.invoke(main, ["exclude", "list"])
+    assert result.exit_code == 0
+    assert "Нет сохранённых" in result.output
+
+
+def test_apply_passes_exclude_to_function(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["apply", "--query", "python", "--exclude", "стажёр", "--exclude", "intern"])
+    assert captured["exclude_patterns"] == ["стажёр", "intern"]
+
+
+def test_apply_uses_saved_excludes(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["exclude", "add", "стажёр|intern"])
+    runner.invoke(main, ["apply", "--query", "python"])
+    assert captured["exclude_patterns"] == ["стажёр|intern"]
+
+
+def test_apply_cli_exclude_overrides_saved(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["exclude", "add", "saved_pattern"])
+    runner.invoke(main, ["apply", "--query", "python", "--exclude", "cli_pattern"])
+    assert captured["exclude_patterns"] == ["cli_pattern"]
+
+
+def test_apply_no_excludes(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["apply", "--query", "python"])
+    assert captured["exclude_patterns"] is None

@@ -28,6 +28,7 @@ def login() -> None:
 @click.option("--resume", type=str, help="ID резюме на hh.ru (если не указан, используется сохранённый).")
 @click.option("--limit", "-l", type=int, default=10, show_default=True, help="Максимум откликов.")
 @click.option("--dry-run", is_flag=True, help="Показать вакансии без отправки откликов.")
+@click.option("--exclude", "-e", multiple=True, help="Regex-паттерн для исключения вакансий по названию (можно указать несколько раз).")
 @click.option(
     "--letter",
     type=click.Choice(["off", "template", "llm", "auto"], case_sensitive=False),
@@ -42,14 +43,14 @@ def login() -> None:
         "Сохранить: openhunt letter strategy <режим>."
     ),
 )
-def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool, letter: str | None) -> None:
+def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool, exclude: tuple[str, ...], letter: str | None) -> None:
     """Автоматически откликнуться на вакансии.
 
     Укажите источник вакансий (обязательно один из):
     --query, --saved или --recommended.
     """
     from openhunt.browser.actions.apply import LetterStrategy, apply_to_vacancies
-    from openhunt.config import get_cover_letter, get_default_resume, get_letter_strategy, get_llm_config, get_saved_queries
+    from openhunt.config import get_cover_letter, get_default_resume, get_exclude_patterns, get_letter_strategy, get_llm_config, get_saved_queries
 
     if resume is None:
         resume = get_default_resume()
@@ -86,6 +87,9 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
         if letter_strategy is None:
             letter_strategy = LetterStrategy.LLM if get_llm_config() is not None else LetterStrategy.TEMPLATE
 
+    # Resolve exclude patterns: CLI flags > saved config
+    exclude_list = list(exclude) if exclude else get_exclude_patterns()
+
     apply_to_vacancies(
         query=query,
         recommended=recommended,
@@ -94,6 +98,7 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
         cover_letter=get_cover_letter(),
         letter_strategy=letter_strategy,
         dry_run=dry_run,
+        exclude_patterns=exclude_list or None,
     )
 
 
@@ -321,6 +326,70 @@ def query_delete(name: str) -> None:
         click.echo(f"Запрос '{name}' удалён.")
     else:
         click.echo(f"Запрос '{name}' не найден.")
+
+
+@main.group()
+def exclude() -> None:
+    """Управление фильтрами исключения вакансий."""
+
+
+@exclude.command("add")
+@click.argument("pattern")
+def exclude_add(pattern: str) -> None:
+    """Добавить regex-паттерн: openhunt exclude add "стажёр|intern"."""
+    import re
+
+    from openhunt.config import get_exclude_patterns, set_exclude_patterns
+
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise click.UsageError(f"Некорректный regex: {e}")
+
+    patterns = get_exclude_patterns()
+    if pattern in patterns:
+        click.echo(f"Паттерн уже существует: {pattern}")
+        return
+    patterns.append(pattern)
+    set_exclude_patterns(patterns)
+    click.echo(f"Паттерн добавлен: {pattern}")
+
+
+@exclude.command("list")
+def exclude_list() -> None:
+    """Показать все сохранённые паттерны исключения."""
+    from openhunt.config import get_exclude_patterns
+
+    patterns = get_exclude_patterns()
+    if not patterns:
+        click.echo("Нет сохранённых паттернов исключения.")
+        return
+    for p in patterns:
+        click.echo(f"  {p}")
+
+
+@exclude.command("delete")
+@click.argument("pattern")
+def exclude_delete(pattern: str) -> None:
+    """Удалить сохранённый паттерн."""
+    from openhunt.config import get_exclude_patterns, set_exclude_patterns
+
+    patterns = get_exclude_patterns()
+    if pattern in patterns:
+        patterns.remove(pattern)
+        set_exclude_patterns(patterns)
+        click.echo(f"Паттерн удалён: {pattern}")
+    else:
+        click.echo(f"Паттерн не найден: {pattern}")
+
+
+@exclude.command("clear")
+def exclude_clear() -> None:
+    """Удалить все сохранённые паттерны."""
+    from openhunt.config import set_exclude_patterns
+
+    set_exclude_patterns([])
+    click.echo("Все паттерны удалены.")
 
 
 @main.group()

@@ -1,5 +1,6 @@
 """Auto-apply to vacancies on hh.ru."""
 
+import re
 from enum import Enum, StrEnum
 from urllib.parse import quote
 
@@ -21,6 +22,7 @@ class ApplyResult(Enum):
     APPLIED = "applied"
     ALREADY_APPLIED = "already_applied"
     QUESTIONNAIRE = "questionnaire"
+    EXCLUDED = "excluded"
     ERROR = "error"
 
 
@@ -29,8 +31,8 @@ RECOMMENDED_URL = "https://hh.ru/search/vacancy?resume={resume_id}&hhtmFrom=main
 GOTO_TIMEOUT = 15_000  # 15 seconds for vacancy page loads
 
 
-def _get_vacancy_links(page: Page) -> list[str]:
-    """Extract vacancy URLs from the current page."""
+def _get_vacancy_links(page: Page) -> list[tuple[str, str]]:
+    """Extract vacancy (URL, title) pairs from the current page."""
     elements = page.query_selector_all(selectors.VACANCY_TITLE_LINK)
     links = []
     for el in elements:
@@ -38,7 +40,8 @@ def _get_vacancy_links(page: Page) -> list[str]:
         if href:
             if href.startswith("/"):
                 href = f"https://hh.ru{href}"
-            links.append(href)
+            title = el.inner_text().strip().replace("\xa0", " ")
+            links.append((href, title))
     return links
 
 
@@ -375,6 +378,14 @@ def _try_apply(
     return ApplyResult.ERROR
 
 
+def _compile_exclude_patterns(patterns: list[str]) -> list[re.Pattern[str]]:
+    """Compile exclude regex patterns (case-insensitive)."""
+    compiled = []
+    for pat in patterns:
+        compiled.append(re.compile(pat, re.IGNORECASE))
+    return compiled
+
+
 def apply_to_vacancies(
     query: str | None,
     recommended: bool,
@@ -383,8 +394,11 @@ def apply_to_vacancies(
     cover_letter: str = "",
     letter_strategy: LetterStrategy = LetterStrategy.TEMPLATE,
     dry_run: bool = False,
+    exclude_patterns: list[str] | None = None,
 ) -> None:
     """Main apply loop."""
+    compiled_excludes = _compile_exclude_patterns(exclude_patterns or [])
+
     with browser_context(headless=True) as page:
         if not check_auth(page):
             click.echo("Сессия истекла. Выполните 'openhunt login' для авторизации.")
@@ -403,7 +417,7 @@ def apply_to_vacancies(
             user_name = get_user_name() or ""
 
         applied = 0
-        skipped = {ApplyResult.ALREADY_APPLIED: 0, ApplyResult.QUESTIONNAIRE: 0, ApplyResult.ERROR: 0}
+        skipped = {ApplyResult.ALREADY_APPLIED: 0, ApplyResult.QUESTIONNAIRE: 0, ApplyResult.EXCLUDED: 0, ApplyResult.ERROR: 0}
         page_num = 0
 
         if dry_run:
@@ -431,9 +445,14 @@ def apply_to_vacancies(
                 break
             has_next = page.query_selector(selectors.PAGER_NEXT) is not None
 
-            for link in vacancy_links:
+            for link, title in vacancy_links:
                 if applied >= limit:
                     break
+
+                if compiled_excludes and any(pat.search(title) for pat in compiled_excludes):
+                    skipped[ApplyResult.EXCLUDED] += 1
+                    click.echo(f"  ~ Пропуск (исключён): {title}")
+                    continue
 
                 try:
                     result = _try_apply(page, link, resume_id, cover_letter, letter_strategy, dry_run, profile_text, user_name)
@@ -444,15 +463,16 @@ def apply_to_vacancies(
                 if result == ApplyResult.APPLIED:
                     applied += 1
                     if dry_run:
-                        click.echo(f"  [{applied}/{limit}] Откликнулся бы: {link}")
+                        click.echo(f"  [{applied}/{limit}] Откликнулся бы: {title}")
                     else:
-                        click.echo(f"  [{applied}/{limit}] Откликнулся: {link}")
+                        click.echo(f"  [{applied}/{limit}] Откликнулся: {title}")
                         human_delay(2.0, 4.0)
                 else:
                     skipped[result] += 1
                     reason = {
                         ApplyResult.ALREADY_APPLIED: "уже откликались",
                         ApplyResult.QUESTIONNAIRE: "требуется анкета",
+                        ApplyResult.EXCLUDED: "исключён",
                         ApplyResult.ERROR: "ошибка",
                     }.get(result, str(result))
                     click.echo(f"  ~ Пропуск ({reason}): {link}")
@@ -479,5 +499,7 @@ def apply_to_vacancies(
                 click.echo(f"    Уже откликались: {skipped[ApplyResult.ALREADY_APPLIED]}")
             if skipped[ApplyResult.QUESTIONNAIRE]:
                 click.echo(f"    Требуется анкета: {skipped[ApplyResult.QUESTIONNAIRE]}")
+            if skipped[ApplyResult.EXCLUDED]:
+                click.echo(f"    Исключено по фильтру: {skipped[ApplyResult.EXCLUDED]}")
             if skipped[ApplyResult.ERROR]:
                 click.echo(f"    Ошибки: {skipped[ApplyResult.ERROR]}")

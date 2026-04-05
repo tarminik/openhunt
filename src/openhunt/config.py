@@ -134,6 +134,21 @@ def set_letter_strategy(strategy: str) -> None:
     save_config(config)
 
 
+def get_exclude_patterns() -> list[str]:
+    """Return saved exclude patterns list."""
+    return load_config().get("exclude_patterns", [])
+
+
+def set_exclude_patterns(patterns: list[str]) -> None:
+    """Save exclude patterns to config."""
+    config = load_config()
+    if patterns:
+        config["exclude_patterns"] = patterns
+    else:
+        config.pop("exclude_patterns", None)
+    save_config(config)
+
+
 def delete_query(name: str) -> bool:
     config = load_config()
     if "queries" in config and name in config["queries"]:

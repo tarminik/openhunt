@@ -19,6 +19,8 @@ from openhunt.config import (
     reset_llm_config,
     get_letter_strategy,
     set_letter_strategy,
+    get_exclude_patterns,
+    set_exclude_patterns,
     invalidate_config_cache,
     CONFIG_PATH,
     OPENHUNT_DIR,
@@ -189,6 +191,31 @@ def test_codex_config_does_not_require_api_key():
 def test_non_codex_requires_api_key():
     set_llm_config("openrouter", model="gpt-4")
     assert get_llm_config() is None  # no api_key → None
+
+
+# --- Exclude patterns ---
+
+
+def test_get_exclude_patterns_empty():
+    assert get_exclude_patterns() == []
+
+
+def test_set_and_get_exclude_patterns():
+    set_exclude_patterns(["стажёр|intern", "Яндекс"])
+    assert get_exclude_patterns() == ["стажёр|intern", "Яндекс"]
+
+
+def test_set_empty_exclude_patterns_removes_key():
+    set_exclude_patterns(["test"])
+    set_exclude_patterns([])
+    config = load_config()
+    assert "exclude_patterns" not in config
+
+
+def test_exclude_patterns_preserves_other_settings():
+    set_default_resume("abc123")
+    set_exclude_patterns(["test"])
+    assert get_default_resume() == "abc123"
 
 
 # --- Auth token storage ---
