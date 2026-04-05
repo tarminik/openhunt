@@ -43,7 +43,11 @@ def login() -> None:
     ),
 )
 def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool, letter: str | None) -> None:
-    """Автоматически откликнуться на вакансии."""
+    """Автоматически откликнуться на вакансии.
+
+    Укажите источник вакансий (обязательно один из):
+    --query, --saved или --recommended.
+    """
     from openhunt.browser.actions.apply import LetterStrategy, apply_to_vacancies
     from openhunt.config import get_cover_letter, get_default_resume, get_letter_strategy, get_llm_config, get_saved_queries
 
@@ -112,7 +116,7 @@ def resume_set(resume_id: str) -> None:
 
 @resume.command("sync")
 def resume_sync() -> None:
-    """Синхронизировать профиль резюме с hh.ru."""
+    """Скачать профиль резюме с hh.ru (опыт, навыки, образование) для генерации писем."""
     from openhunt.browser.actions.profile import sync_resume_profile
     from openhunt.browser.session import browser_context, check_auth
     from openhunt.config import get_default_resume
@@ -146,7 +150,7 @@ def resume_show() -> None:
 
 @resume.command("raise")
 def resume_raise() -> None:
-    """Поднять резюме в поиске на hh.ru."""
+    """Поднять резюме в поиске на hh.ru (обновить дату, чтобы быть выше в выдаче)."""
     from openhunt.browser.actions.resume import raise_resume
 
     raise_resume()
@@ -187,9 +191,18 @@ def letter_reset() -> None:
 
 
 @letter.command("strategy")
-@click.argument("mode", required=False, default=None)
+@click.argument(
+    "mode",
+    required=False,
+    default=None,
+    type=click.Choice(["off", "template", "llm", "auto"], case_sensitive=False),
+)
 def letter_strategy_cmd(mode: str | None) -> None:
-    """Показать или задать стратегию письма (off/template/llm/auto)."""
+    """Показать или задать стратегию письма.
+
+    Без аргумента — показать текущую стратегию.
+    С аргументом — задать новую.
+    """
     from openhunt.config import get_letter_strategy, set_letter_strategy
 
     if mode is None:
@@ -199,10 +212,6 @@ def letter_strategy_cmd(mode: str | None) -> None:
         else:
             click.echo("Стратегия не задана (используется по умолчанию).")
         return
-
-    valid = ("off", "template", "llm", "auto")
-    if mode.lower() not in valid:
-        raise click.UsageError(f"Допустимые значения: {', '.join(valid)}")
 
     set_letter_strategy(mode.lower())
     click.echo(f"Стратегия сохранена: {mode.lower()}")
@@ -316,7 +325,7 @@ def query_delete(name: str) -> None:
 
 @main.group()
 def codex() -> None:
-    """Управление авторизацией OpenAI Codex."""
+    """Управление авторизацией OpenAI Codex (LLM-провайдер через OAuth)."""
 
 
 @codex.command("login")
