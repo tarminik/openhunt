@@ -6,11 +6,25 @@ from openhunt import __version__
 @click.group()
 @click.version_option(__version__)
 @click.option("--verbose", "-v", is_flag=True, help="Расширенный вывод для отладки.")
+@click.option("--no-update", is_flag=True, help="Не проверять обновления при запуске.")
 @click.pass_context
-def main(ctx: click.Context, verbose: bool) -> None:
+def main(ctx: click.Context, verbose: bool, no_update: bool) -> None:
     """openhunt — автоматизация поиска работы на hh.ru."""
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
+
+    if not no_update:
+        from openhunt.config import get_auto_update
+
+        if get_auto_update():
+            from openhunt.update import check_and_update
+
+            try:
+                check_and_update()
+            except SystemExit:
+                raise
+            except Exception:
+                pass  # never let update check break the CLI
 
 
 @main.command()
@@ -390,6 +404,61 @@ def exclude_clear() -> None:
 
     set_exclude_patterns([])
     click.echo("Все паттерны удалены.")
+
+
+@main.group()
+def update() -> None:
+    """Управление автообновлением."""
+
+
+@update.command("on")
+def update_on() -> None:
+    """Включить автообновление при запуске."""
+    from openhunt.config import set_auto_update
+
+    set_auto_update(True)
+    click.echo("Автообновление включено.")
+
+
+@update.command("off")
+def update_off() -> None:
+    """Выключить автообновление (только предупреждение)."""
+    from openhunt.config import set_auto_update
+
+    set_auto_update(False)
+    click.echo("Автообновление выключено.")
+
+
+@update.command("status")
+def update_status() -> None:
+    """Показать статус автообновления."""
+    from openhunt.config import get_auto_update
+
+    if get_auto_update():
+        click.echo("Автообновление: включено")
+    else:
+        click.echo("Автообновление: выключено")
+
+
+@update.command("check")
+def update_check() -> None:
+    """Проверить наличие обновлений прямо сейчас."""
+    from openhunt.update import _fetch_latest_version, _parse_version, _save_cache
+
+    click.echo(f"Текущая версия: {__version__}")
+    click.echo("Проверяю PyPI...")
+
+    latest = _fetch_latest_version()
+    if latest is None:
+        click.echo("Не удалось связаться с PyPI.")
+        return
+
+    _save_cache(latest)
+
+    if _parse_version(latest) <= _parse_version(__version__):
+        click.echo(f"Установлена последняя версия ({__version__}).")
+    else:
+        click.echo(f"Доступна новая версия: {latest}")
 
 
 @main.group()

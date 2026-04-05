@@ -134,6 +134,18 @@ def set_letter_strategy(strategy: str) -> None:
     save_config(config)
 
 
+def get_auto_update() -> bool:
+    """Return whether auto-update is enabled (default: True)."""
+    return load_config().get("auto_update", True)
+
+
+def set_auto_update(enabled: bool) -> None:
+    """Save auto-update setting."""
+    config = load_config()
+    config["auto_update"] = enabled
+    save_config(config)
+
+
 def get_exclude_patterns() -> list[str]:
     """Return saved exclude patterns list."""
     return load_config().get("exclude_patterns", [])

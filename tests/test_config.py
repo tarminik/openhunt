@@ -19,6 +19,8 @@ from openhunt.config import (
     reset_llm_config,
     get_letter_strategy,
     set_letter_strategy,
+    get_auto_update,
+    set_auto_update,
     get_exclude_patterns,
     set_exclude_patterns,
     invalidate_config_cache,
@@ -191,6 +193,30 @@ def test_codex_config_does_not_require_api_key():
 def test_non_codex_requires_api_key():
     set_llm_config("openrouter", model="gpt-4")
     assert get_llm_config() is None  # no api_key → None
+
+
+# --- Auto-update ---
+
+
+def test_get_auto_update_default():
+    assert get_auto_update() is True
+
+
+def test_set_auto_update_false():
+    set_auto_update(False)
+    assert get_auto_update() is False
+
+
+def test_set_auto_update_true():
+    set_auto_update(False)
+    set_auto_update(True)
+    assert get_auto_update() is True
+
+
+def test_auto_update_preserves_other_settings():
+    set_default_resume("abc123")
+    set_auto_update(False)
+    assert get_default_resume() == "abc123"
 
 
 # --- Exclude patterns ---
