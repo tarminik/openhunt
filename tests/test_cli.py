@@ -541,6 +541,17 @@ def test_apply_cli_exclude_overrides_saved(tmp_path, monkeypatch):
     assert captured["exclude_patterns"] == ["cli_pattern"]
 
 
+def test_apply_invalid_exclude_regex(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    result = runner.invoke(main, ["apply", "--query", "python", "--exclude", "[invalid"])
+    assert result.exit_code != 0
+    assert "regex" in result.output.lower()
+
+
 def test_apply_no_excludes(tmp_path, monkeypatch):
     monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
     monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")

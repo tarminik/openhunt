@@ -379,10 +379,16 @@ def _try_apply(
 
 
 def _compile_exclude_patterns(patterns: list[str]) -> list[re.Pattern[str]]:
-    """Compile exclude regex patterns (case-insensitive)."""
+    """Compile exclude regex patterns (case-insensitive).
+
+    Raises click.UsageError on invalid regex.
+    """
     compiled = []
     for pat in patterns:
-        compiled.append(re.compile(pat, re.IGNORECASE))
+        try:
+            compiled.append(re.compile(pat, re.IGNORECASE))
+        except re.error as e:
+            raise click.UsageError(f"Некорректный regex в --exclude: '{pat}' ({e})")
     return compiled
 
 
@@ -463,9 +469,9 @@ def apply_to_vacancies(
                 if result == ApplyResult.APPLIED:
                     applied += 1
                     if dry_run:
-                        click.echo(f"  [{applied}/{limit}] Откликнулся бы: {title}")
+                        click.echo(f"  [{applied}/{limit}] Откликнулся бы: {title}\n    {link}")
                     else:
-                        click.echo(f"  [{applied}/{limit}] Откликнулся: {title}")
+                        click.echo(f"  [{applied}/{limit}] Откликнулся: {title}\n    {link}")
                         human_delay(2.0, 4.0)
                 else:
                     skipped[result] += 1
