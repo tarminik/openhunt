@@ -29,6 +29,18 @@ RESPONSE_LETTER_SUBMIT = "[data-qa='vacancy-response-letter-submit']"
 RESPONSE_LETTER_INFORMER = "[data-qa='vacancy-response-letter-informer']"
 RESPONSE_LETTER_TEXTAREA = "[data-qa='vacancy-response-letter-informer'] textarea"
 
+# --- Questionnaire form (employer questions on /applicant/vacancy_response) ---
+# All option types share the same wrapper structure (label[data-qa='cell']);
+# they differ only in <input type='radio'> vs <input type='checkbox'> inside.
+QUESTIONNAIRE_CONTAINER = "[data-qa='employer-asking-for-test']"
+QUESTIONNAIRE_DESCRIPTION = "[data-qa='test-description']"
+QUESTIONNAIRE_TASK = "[data-qa='task-body']"
+QUESTIONNAIRE_QUESTION_TEXT = "[data-qa='task-question']"
+QUESTIONNAIRE_OPTION_CELL = "[data-qa='cell']"
+QUESTIONNAIRE_OPTION_TEXT = "[data-qa='cell-text-content']"
+# Submit button is shared with the popup form (RESPONSE_POPUP_SUBMIT)
+QUESTIONNAIRE_SUBMIT = RESPONSE_POPUP_SUBMIT
+
 # --- Resume page (/applicant/resumes) ---
 RESUME_CARD = "[data-qa='resume']"
 RESUME_RAISE_BUTTON = "[data-qa~='resume-update-button']"

@@ -1,7 +1,9 @@
 """Auto-apply to vacancies on hh.ru."""
 
 import re
+import time
 from enum import Enum, StrEnum
+from pathlib import Path
 from urllib.parse import quote
 
 import click
@@ -16,6 +18,13 @@ class LetterStrategy(StrEnum):
     TEMPLATE = "template"
     LLM = "llm"
     AUTO = "auto"
+
+
+class QuestionnaireStrategy(StrEnum):
+    """How to handle vacancies that require answering employer questions."""
+
+    SKIP = "skip"               # current default — skip and report
+    INTERACTIVE = "interactive"  # fill via memory, prompt user for unknowns
 
 
 class ApplyResult(Enum):
@@ -245,6 +254,8 @@ def _try_apply(
     dry_run: bool = False,
     profile_text: str = "",
     user_name: str = "",
+    questionnaires_dump_dir: Path | None = None,
+    questionnaires_strategy: "QuestionnaireStrategy" = QuestionnaireStrategy.SKIP,
 ) -> ApplyResult:
     """Try to apply to a single vacancy.
 
@@ -302,7 +313,39 @@ def _try_apply(
 
     # --- Flow 4: Questionnaire page ---
     if apply_state == "questionnaire":
-        page.go_back()
+        if questionnaires_dump_dir is not None:
+            _dump_questionnaire(page, vacancy_url, questionnaires_dump_dir)
+
+        if questionnaires_strategy == QuestionnaireStrategy.INTERACTIVE:
+            from openhunt.browser.actions.questionnaire import (
+                fill_questionnaire,
+                submit_questionnaire,
+            )
+
+            try:
+                filled = fill_questionnaire(page, interactive=True)
+            except (KeyboardInterrupt, click.Abort):
+                # User aborted: propagate so the outer apply loop also stops,
+                # rather than silently moving on to the next vacancy.
+                raise
+            except Exception as e:
+                click.echo(f"  ! Ошибка при заполнении анкеты: {e}")
+                filled = False
+
+            if not filled:
+                # Direct navigation back to the vacancy — page.go_back() is
+                # unreliable on /applicant/vacancy_response (observed timeouts).
+                page.goto(vacancy_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
+                return ApplyResult.QUESTIONNAIRE
+
+            if submit_questionnaire(page):
+                return ApplyResult.APPLIED
+            click.echo("  ! Анкета заполнена, но отправка не подтверждена.")
+            return ApplyResult.ERROR
+
+        # Skip mode: get back to the vacancy without using the unreliable
+        # page.go_back() (which times out from the questionnaire page).
+        page.goto(vacancy_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
         return ApplyResult.QUESTIONNAIRE
 
     # --- Flows 2 & 3: Popup modal (optional or required letter) ---
@@ -378,6 +421,42 @@ def _try_apply(
     return ApplyResult.ERROR
 
 
+_VACANCY_ID_RE = re.compile(r"/vacancy/(\d+)")
+
+
+def _vacancy_id_from_url(url: str) -> str:
+    """Extract vacancy ID from a hh.ru vacancy URL, or return 'unknown'."""
+    m = _VACANCY_ID_RE.search(url)
+    return m.group(1) if m else "unknown"
+
+
+def _dump_questionnaire(page: Page, vacancy_url: str, dump_dir: Path) -> None:
+    """Save questionnaire page (URL, HTML, screenshot) for offline analysis.
+
+    Used by recon mode to collect real questionnaire samples before designing
+    the actual fill flow.
+    """
+    try:
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        vid = _vacancy_id_from_url(vacancy_url)
+        ts = time.strftime("%Y%m%d-%H%M%S")
+        sample_dir = dump_dir / f"{vid}_{ts}"
+        sample_dir.mkdir(parents=True, exist_ok=True)
+
+        meta = (
+            f"vacancy_url: {vacancy_url}\n"
+            f"current_url: {page.url}\n"
+            f"title:       {page.title()}\n"
+            f"timestamp:   {ts}\n"
+        )
+        (sample_dir / "meta.txt").write_text(meta, encoding="utf-8")
+        (sample_dir / "page.html").write_text(page.content(), encoding="utf-8")
+        page.screenshot(path=str(sample_dir / "screenshot.png"), full_page=True)
+        click.echo(f"  ⊙ Анкета сохранена: {sample_dir}")
+    except Exception as e:
+        click.echo(f"  ! Не удалось сохранить анкету: {e}")
+
+
 def _compile_exclude_patterns(patterns: list[str]) -> list[re.Pattern[str]]:
     """Compile exclude regex patterns (case-insensitive).
 
@@ -401,6 +480,8 @@ def apply_to_vacancies(
     letter_strategy: LetterStrategy = LetterStrategy.TEMPLATE,
     dry_run: bool = False,
     exclude_patterns: list[str] | None = None,
+    questionnaires_dump_dir: Path | None = None,
+    questionnaires_strategy: QuestionnaireStrategy = QuestionnaireStrategy.SKIP,
 ) -> None:
     """Main apply loop."""
     compiled_excludes = _compile_exclude_patterns(exclude_patterns or [])
@@ -461,7 +542,15 @@ def apply_to_vacancies(
                     continue
 
                 try:
-                    result = _try_apply(page, link, resume_id, cover_letter, letter_strategy, dry_run, profile_text, user_name)
+                    result = _try_apply(
+                        page, link, resume_id, cover_letter, letter_strategy, dry_run,
+                        profile_text, user_name, questionnaires_dump_dir,
+                        questionnaires_strategy,
+                    )
+                except (KeyboardInterrupt, click.Abort):
+                    # User aborted (e.g. Ctrl+C in interactive questionnaire) —
+                    # do not swallow it as a per-vacancy error.
+                    raise
                 except Exception as e:
                     click.echo(f"  ! Ошибка: {e}")
                     result = ApplyResult.ERROR

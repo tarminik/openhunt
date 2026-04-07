@@ -55,14 +55,31 @@ def login() -> None:
         "Сохранить: openhunt letter strategy <режим>."
     ),
 )
-def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool, exclude: tuple[str, ...], letter: str | None) -> None:
+@click.option(
+    "--questionnaires",
+    type=click.Choice(["skip", "interactive"], case_sensitive=False),
+    default="skip",
+    show_default=True,
+    help=(
+        "Что делать с вакансиями, требующими ответов на вопросы работодателя: "
+        "skip — пропускать (как раньше); "
+        "interactive — заполнять из памяти, неизвестные вопросы спрашивать у пользователя."
+    ),
+)
+@click.option(
+    "--dump-questionnaires",
+    is_flag=True,
+    hidden=True,
+    help="[recon] При обнаружении анкеты сохранить HTML и скриншот в ~/.openhunt/recon/questionnaires/",
+)
+def apply(query: str | None, saved: str | None, recommended: bool, resume: str | None, limit: int, dry_run: bool, exclude: tuple[str, ...], letter: str | None, questionnaires: str, dump_questionnaires: bool) -> None:
     """Автоматически откликнуться на вакансии.
 
     Укажите источник вакансий (обязательно один из):
     --query, --saved или --recommended.
     """
-    from openhunt.browser.actions.apply import LetterStrategy, apply_to_vacancies
-    from openhunt.config import get_cover_letter, get_default_resume, get_exclude_patterns, get_letter_strategy, get_llm_config, get_saved_queries
+    from openhunt.browser.actions.apply import LetterStrategy, QuestionnaireStrategy, apply_to_vacancies
+    from openhunt.config import OPENHUNT_DIR, get_cover_letter, get_default_resume, get_exclude_patterns, get_letter_strategy, get_llm_config, get_saved_queries
 
     if resume is None:
         resume = get_default_resume()
@@ -102,6 +119,9 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
     # Resolve exclude patterns: CLI flags > saved config
     exclude_list = list(exclude) if exclude else get_exclude_patterns()
 
+    dump_dir = (OPENHUNT_DIR / "recon" / "questionnaires") if dump_questionnaires else None
+    questionnaires_strategy = QuestionnaireStrategy(questionnaires.lower())
+
     apply_to_vacancies(
         query=query,
         recommended=recommended,
@@ -111,6 +131,8 @@ def apply(query: str | None, saved: str | None, recommended: bool, resume: str |
         letter_strategy=letter_strategy,
         dry_run=dry_run,
         exclude_patterns=exclude_list or None,
+        questionnaires_dump_dir=dump_dir,
+        questionnaires_strategy=questionnaires_strategy,
     )
 
 
