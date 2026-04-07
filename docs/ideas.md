@@ -86,3 +86,6 @@ No LLM required — pure Playwright automation.
 - Telegram bot integration for notifications
 - Multiple job site support (SuperJob, Habr Career, etc.)
 - Market analysis (salary trends, skill demand)
+
+## References
+- [s3rgeym/hh-applicant-tool](https://github.com/s3rgeym/hh-applicant-tool) — похожий инструмент, но на базе реверс-инженеренного API hh.ru (Android-клиент). Более зрелый: SQLite для истории, AI-фильтрация вакансий, решение тестов, ответы в чатах, Docker+cron, рандомизация шаблонов `{вариант1|вариант2}`. Хрупкий фундамент (ключи могут отозвать). Источник идей для фич.
