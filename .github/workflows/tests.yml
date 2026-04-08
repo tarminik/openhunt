@@ -15,4 +15,5 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - run: uv sync
+      - run: uv run playwright install --with-deps chromium
       - run: uv run pytest -v
