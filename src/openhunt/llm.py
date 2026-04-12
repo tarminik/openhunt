@@ -137,22 +137,25 @@ def _generate_via_responses(
     client: OpenAI, model: str, user_message: str,
     system_prompt: str = SYSTEM_PROMPT,
 ) -> str | None:
-    """Generate using the OpenAI Responses API (Codex)."""
-    response = client.responses.create(
+    """Generate using the OpenAI Responses API (Codex).
+
+    Uses streaming because the Codex backend requires stream=True.
+    """
+    chunks: list[str] = []
+    stream = client.responses.create(
         model=model,
         instructions=system_prompt,
         input=[{"role": "user", "content": user_message}],
         max_output_tokens=1024,
         temperature=0.7,
         store=False,
+        stream=True,
     )
-    # Responses API returns output items
-    for item in response.output:
-        if item.type == "message":
-            for content in item.content:
-                if content.type == "output_text":
-                    return content.text.strip()
-    return None
+    for event in stream:
+        if event.type == "response.output_text.delta":
+            chunks.append(event.delta)
+    text = "".join(chunks).strip()
+    return text or None
 
 
 def generate_cover_letter(

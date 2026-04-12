@@ -110,20 +110,14 @@ def test_codex_uses_responses_api(monkeypatch):
     from openhunt.config import set_llm_config
     set_llm_config("codex", model="gpt-5.4")
 
-    mock_content = MagicMock()
-    mock_content.type = "output_text"
-    mock_content.text = "Codex-письмо."
-
-    mock_message = MagicMock()
-    mock_message.type = "message"
-    mock_message.content = [mock_content]
-
-    mock_response = MagicMock()
-    mock_response.output = [mock_message]
+    # Simulate streaming: responses.create returns an iterable of events
+    event = MagicMock()
+    event.type = "response.output_text.delta"
+    event.delta = "Codex-письмо."
 
     with patch("openhunt.auth.get_valid_codex_token", return_value="fake-token"):
         with patch("openhunt.llm.OpenAI") as mock_cls:
-            mock_cls.return_value.responses.create.return_value = mock_response
+            mock_cls.return_value.responses.create.return_value = [event]
             result = generate_cover_letter("Dev", "Описание")
 
     assert result == "Codex-письмо."
