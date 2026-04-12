@@ -10,10 +10,13 @@ from playwright.sync_api import sync_playwright
 from openhunt.browser.actions.questionnaire import (
     OTHER_SENTINEL,
     CannotFillError,
+    CollectResult,
     Question,
     QuestionnaireParseError,
     QuestionOption,
     apply_answer,
+    ask_offline_answer,
+    collect_and_fill,
     extract_questions,
     find_option_by_text,
     get_intro_text,
@@ -543,3 +546,98 @@ def test_apply_answer_missing_option_raises(page):
     )
     with pytest.raises(CannotFillError, match="not found"):
         apply_answer(page, q, {"option": "B"})
+
+
+# --- collect_and_fill ---
+
+
+def _render_single_choice_questionnaire(page):
+    """Render a simple questionnaire with one single-choice question."""
+    _render(
+        page,
+        '<div data-qa="task-body">'
+        '<div data-qa="task-question">Формат работы?</div>'
+        + _option_cell("q1", "v1", "Удаленка", "radio")
+        + _option_cell("q1", "v2", "Офис", "radio")
+        + "</div>",
+    )
+
+
+def test_collect_and_fill_all_answered(page, tmp_path, monkeypatch):
+    """When all answers are in memory, collect_and_fill fills and returns filled=True."""
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "answers.json")
+    from openhunt.answers import save_answer
+
+    save_answer("Формат работы?", "single_choice", {"option": "Удаленка"})
+    _render_single_choice_questionnaire(page)
+
+    result = collect_and_fill(page)
+    assert result.filled is True
+    assert result.pending == []
+    # Verify the radio was actually checked
+    checked = page.eval_on_selector("input[name='q1'][value='v1']", "el => el.checked")
+    assert checked is True
+
+
+def test_collect_and_fill_saves_pending(page, tmp_path, monkeypatch):
+    """When no answer in memory, saves pending and returns filled=False."""
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "answers.json")
+    _render_single_choice_questionnaire(page)
+
+    result = collect_and_fill(page)
+    assert result.filled is False
+    assert len(result.pending) == 1
+    assert result.pending[0].text == "Формат работы?"
+
+    # Verify it was saved to memory as pending
+    from openhunt.answers import list_pending
+
+    pending = list_pending()
+    assert len(pending) == 1
+    assert pending[0]["answer"] is None
+    assert pending[0]["options"] == [{"text": "Удаленка"}, {"text": "Офис"}]
+
+
+def test_collect_and_fill_stale_answer_saves_pending(page, tmp_path, monkeypatch):
+    """When stored answer doesn't match options, saves as pending."""
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "answers.json")
+    from openhunt.answers import save_answer
+
+    # Save an answer with an option that doesn't exist on this page
+    save_answer("Формат работы?", "single_choice", {"option": "Гибрид"})
+    _render_single_choice_questionnaire(page)
+
+    result = collect_and_fill(page)
+    assert result.filled is False
+    assert len(result.pending) == 1
+
+
+def test_collect_and_fill_no_container(page, tmp_path, monkeypatch):
+    """When page has no questionnaire, returns filled=False with no pending."""
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "answers.json")
+    page.set_content("<html><body><p>not a questionnaire</p></body></html>")
+
+    result = collect_and_fill(page)
+    assert result.filled is False
+    assert result.pending == []
+
+
+# --- ask_offline_answer ---
+
+
+def test_ask_offline_answer_text(monkeypatch):
+    monkeypatch.setattr("click.prompt", lambda *a, **kw: "Пять лет")
+    record = {"text": "Сколько лет опыта?", "type": "text", "options": []}
+    answer = ask_offline_answer(record)
+    assert answer == {"text": "Пять лет"}
+
+
+def test_ask_offline_answer_single_choice(monkeypatch):
+    monkeypatch.setattr("click.prompt", lambda *a, **kw: "1")
+    record = {
+        "text": "Формат?",
+        "type": "single_choice",
+        "options": [{"text": "Удаленка"}, {"text": "Офис"}],
+    }
+    answer = ask_offline_answer(record)
+    assert answer == {"option": "Удаленка"}

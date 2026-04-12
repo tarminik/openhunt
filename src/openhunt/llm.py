@@ -1,6 +1,7 @@
-"""LLM-powered cover letter generation."""
+"""LLM-powered cover letter generation and questionnaire answering."""
 
 import hashlib
+import json
 
 import click
 from openai import OpenAI, OpenAIError
@@ -114,12 +115,13 @@ def _build_user_message(
 
 def _generate_via_chat_completions(
     client: OpenAI, model: str, user_message: str,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> str | None:
     """Generate using the standard chat completions API."""
     response = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
         max_tokens=1024,
@@ -133,11 +135,12 @@ def _generate_via_chat_completions(
 
 def _generate_via_responses(
     client: OpenAI, model: str, user_message: str,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> str | None:
     """Generate using the OpenAI Responses API (Codex)."""
     response = client.responses.create(
         model=model,
-        instructions=SYSTEM_PROMPT,
+        instructions=system_prompt,
         input=[{"role": "user", "content": user_message}],
         max_output_tokens=1024,
         temperature=0.7,
@@ -183,3 +186,149 @@ def generate_cover_letter(
     except (OpenAIError, Exception) as e:
         click.echo(f"  ! LLM ошибка: {e}")
         return None
+
+
+# --- Questionnaire answering ---
+
+QUESTIONNAIRE_SYSTEM_PROMPT = """\
+Ты помощник соискателя. Тебе дан профиль соискателя и список вопросов от работодателей.
+
+Для каждого вопроса определи:
+1. Можешь ли ты ответить на основе профиля и здравого смысла (профессиональные, фактические вопросы).
+2. Или это требует личного решения соискателя (зарплата, переезд, дата выхода, личные обстоятельства).
+
+Примеры вопросов, которые ты МОЖЕШЬ ответить:
+- "Какие HTTP-методы вы знаете?" — профессиональный факт
+- "Опыт работы с Python?" — есть в профиле
+- "Какой формат работы предпочитаете?" — если в профиле указано
+
+Примеры вопросов, которые НЕ МОЖЕШЬ (needs_human=true):
+- "Ожидания по зарплате?" — личное решение
+- "Когда можете приступить к работе?" — зависит от обстоятельств
+- "Готовы ли к командировкам?" — личный выбор
+
+Формат ответа — строго JSON массив:
+[
+  {
+    "id": "q_...",
+    "needs_human": false,
+    "answer": {"text": "ваш ответ"}
+  },
+  {
+    "id": "q_...",
+    "needs_human": true,
+    "answer": null
+  }
+]
+
+Правила для ответов:
+- text: {"text": "ваш ответ"}
+- single_choice / single_choice_other: {"option": "текст опции из списка"}
+- multi_choice / multi_choice_other: {"options": ["опция1", "опция2"]}
+- Для *_other типов, если нужен свободный текст: {"option": "__OTHER__", "free_text": "..."}
+- Выбирай ТОЛЬКО из указанных опций. Не выдумывай опции.
+- Отвечай кратко, профессионально, от первого лица.
+- Если вопрос с выбором и ни одна опция не подходит по профилю — needs_human=true.
+- Верни ТОЛЬКО JSON массив, без markdown-обёрток."""
+
+
+def _build_questions_message(
+    questions: list[dict],
+    profile_text: str = "",
+    user_name: str = "",
+) -> str:
+    """Build the user message for question answering."""
+    parts = []
+    if user_name:
+        parts.append(f"Имя соискателя: {user_name}")
+    if profile_text:
+        parts.append(f"Профиль соискателя:\n{profile_text}")
+
+    parts.append("Вопросы:")
+    for q in questions:
+        entry = f"\nID: {q['id']}\nТип: {q['type']}\nВопрос: {q['text']}"
+        opts = q.get("options")
+        if opts:
+            labels = ", ".join(o["text"] for o in opts)
+            entry += f"\nВарианты: {labels}"
+        parts.append(entry)
+
+    return "\n\n".join(parts)
+
+
+def _parse_answers_response(raw: str, questions: list[dict]) -> list[dict]:
+    """Parse the LLM JSON response, falling back to needs_human on errors."""
+    # Strip markdown fences if present
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines)
+
+    try:
+        items = json.loads(text)
+    except json.JSONDecodeError:
+        return [{"id": q["id"], "needs_human": True, "answer": None} for q in questions]
+
+    if not isinstance(items, list):
+        return [{"id": q["id"], "needs_human": True, "answer": None} for q in questions]
+
+    # Index by id for lookup
+    by_id = {item["id"]: item for item in items if isinstance(item, dict) and "id" in item}
+    results = []
+    for q in questions:
+        item = by_id.get(q["id"])
+        if item and not item.get("needs_human") and item.get("answer") is not None:
+            results.append({
+                "id": q["id"],
+                "needs_human": False,
+                "answer": item["answer"],
+            })
+        else:
+            results.append({"id": q["id"], "needs_human": True, "answer": None})
+    return results
+
+
+def answer_questions(
+    questions: list[dict],
+    profile_text: str = "",
+    user_name: str = "",
+) -> list[dict]:
+    """Classify and answer pending questions using LLM.
+
+    Returns a list of dicts: [{"id": "q_...", "needs_human": bool, "answer": dict | None}].
+    Questions the LLM cannot answer get needs_human=True, answer=None.
+    On any LLM error, all questions are marked as needs_human.
+    """
+    if not questions:
+        return []
+
+    llm_config = get_llm_config()
+    if not llm_config:
+        return [{"id": q["id"], "needs_human": True, "answer": None} for q in questions]
+
+    client = _get_client()
+    if not client:
+        return [{"id": q["id"], "needs_human": True, "answer": None} for q in questions]
+
+    user_message = _build_questions_message(questions, profile_text, user_name)
+    provider = llm_config.get("provider", "custom")
+    model = llm_config["model"]
+
+    try:
+        if provider == "codex":
+            raw = _generate_via_responses(
+                client, model, user_message, QUESTIONNAIRE_SYSTEM_PROMPT,
+            )
+        else:
+            raw = _generate_via_chat_completions(
+                client, model, user_message, QUESTIONNAIRE_SYSTEM_PROMPT,
+            )
+    except (OpenAIError, Exception) as e:
+        click.echo(f"  ! LLM ошибка: {e}")
+        return [{"id": q["id"], "needs_human": True, "answer": None} for q in questions]
+
+    if not raw:
+        return [{"id": q["id"], "needs_human": True, "answer": None} for q in questions]
+
+    return _parse_answers_response(raw, questions)

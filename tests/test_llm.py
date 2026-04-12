@@ -1,10 +1,16 @@
-"""Tests for LLM cover letter generation."""
+"""Tests for LLM cover letter generation and questionnaire answering."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from openhunt.llm import generate_cover_letter, reset_client
+from openhunt.llm import (
+    _parse_answers_response,
+    answer_questions,
+    generate_cover_letter,
+    reset_client,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -131,3 +137,103 @@ def test_codex_returns_none_without_token(monkeypatch):
         result = generate_cover_letter("Dev", "Описание")
 
     assert result is None
+
+
+# --- _parse_answers_response ---
+
+
+_SAMPLE_QUESTIONS = [
+    {"id": "q_aaa", "type": "text", "text": "Опыт с Python?"},
+    {"id": "q_bbb", "type": "single_choice", "text": "Зарплата?"},
+]
+
+
+def test_parse_valid_json():
+    raw = json.dumps([
+        {"id": "q_aaa", "needs_human": False, "answer": {"text": "5 лет"}},
+        {"id": "q_bbb", "needs_human": True, "answer": None},
+    ])
+    results = _parse_answers_response(raw, _SAMPLE_QUESTIONS)
+    assert len(results) == 2
+    assert results[0]["answer"] == {"text": "5 лет"}
+    assert results[0]["needs_human"] is False
+    assert results[1]["answer"] is None
+    assert results[1]["needs_human"] is True
+
+
+def test_parse_malformed_json_returns_all_needs_human():
+    results = _parse_answers_response("not json at all", _SAMPLE_QUESTIONS)
+    assert len(results) == 2
+    assert all(r["needs_human"] is True for r in results)
+    assert all(r["answer"] is None for r in results)
+
+
+def test_parse_strips_markdown_fences():
+    raw = '```json\n' + json.dumps([
+        {"id": "q_aaa", "needs_human": False, "answer": {"text": "5 лет"}},
+        {"id": "q_bbb", "needs_human": True, "answer": None},
+    ]) + '\n```'
+    results = _parse_answers_response(raw, _SAMPLE_QUESTIONS)
+    assert results[0]["answer"] == {"text": "5 лет"}
+
+
+def test_parse_missing_id_treated_as_needs_human():
+    """If LLM returns fewer items than questions, missing ones get needs_human."""
+    raw = json.dumps([
+        {"id": "q_aaa", "needs_human": False, "answer": {"text": "5 лет"}},
+    ])
+    results = _parse_answers_response(raw, _SAMPLE_QUESTIONS)
+    assert results[0]["needs_human"] is False
+    assert results[1]["needs_human"] is True
+
+
+def test_parse_non_list_returns_all_needs_human():
+    raw = json.dumps({"error": "something went wrong"})
+    results = _parse_answers_response(raw, _SAMPLE_QUESTIONS)
+    assert all(r["needs_human"] is True for r in results)
+
+
+# --- answer_questions ---
+
+
+def test_answer_questions_no_config():
+    """Without LLM configured, all questions are marked needs_human."""
+    results = answer_questions(_SAMPLE_QUESTIONS)
+    assert len(results) == 2
+    assert all(r["needs_human"] is True for r in results)
+
+
+def test_answer_questions_empty_list():
+    assert answer_questions([]) == []
+
+
+def test_answer_questions_calls_llm(monkeypatch):
+    _setup_llm_config(monkeypatch)
+
+    llm_response = json.dumps([
+        {"id": "q_aaa", "needs_human": False, "answer": {"text": "5 лет"}},
+        {"id": "q_bbb", "needs_human": True, "answer": None},
+    ])
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = llm_response
+
+    with patch("openhunt.llm.OpenAI") as mock_cls:
+        mock_cls.return_value.chat.completions.create.return_value = mock_response
+        results = answer_questions(_SAMPLE_QUESTIONS, profile_text="Python dev")
+
+    assert results[0]["answer"] == {"text": "5 лет"}
+    assert results[1]["needs_human"] is True
+
+
+def test_answer_questions_api_error_returns_needs_human(monkeypatch):
+    _setup_llm_config(monkeypatch)
+
+    from openai import OpenAIError
+
+    with patch("openhunt.llm.OpenAI") as mock_cls:
+        mock_cls.return_value.chat.completions.create.side_effect = OpenAIError("fail")
+        results = answer_questions(_SAMPLE_QUESTIONS)
+
+    assert all(r["needs_human"] is True for r in results)

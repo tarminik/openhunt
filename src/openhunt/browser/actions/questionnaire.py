@@ -22,6 +22,14 @@ from openhunt.answers import normalize
 from openhunt.browser import selectors
 from openhunt.browser.session import human_delay
 
+
+@dataclass
+class CollectResult:
+    """Result of collect_and_fill(): which questions were filled, which are pending."""
+
+    filled: bool                  # True if all questions were filled from memory
+    pending: list["Question"] = field(default_factory=list)  # questions without answers
+
 QuestionType = Literal[
     "text",
     "single_choice",
@@ -459,6 +467,21 @@ def ask_user_for_answer(question: Question) -> dict:
     raise CannotFillError(f"unknown question type: {question.type}")
 
 
+def ask_offline_answer(record: dict) -> dict:
+    """Prompt the user for an answer to a question stored in memory (no browser).
+
+    Constructs a lightweight Question from the stored record and reuses the
+    same interactive prompting logic as ``ask_user_for_answer``.
+    """
+    stored_options = record.get("options") or []
+    q = Question(
+        text=record["text"],
+        type=record["type"],
+        options=[QuestionOption(text=o["text"], value="") for o in stored_options],
+    )
+    return ask_user_for_answer(q)
+
+
 # --- Submit ---
 
 
@@ -542,3 +565,51 @@ def fill_questionnaire(page: Page, interactive: bool = True) -> bool:
         click.echo("    ✓ сохранено в память")
 
     return True
+
+
+def _options_for_storage(q: Question) -> list[dict] | None:
+    """Convert Question options to the storage format for answers.json."""
+    if not q.options:
+        return None
+    return [{"text": o.text} for o in q.options]
+
+
+def collect_and_fill(page: Page) -> CollectResult:
+    """Parse questions, fill from memory if possible, save pending ones.
+
+    Never prompts the user. Returns a CollectResult indicating whether all
+    questions were filled (caller should submit) or some are pending (caller
+    should skip the vacancy).
+    """
+    questions = extract_questions(page)
+    if not questions:
+        click.echo("  ! Анкета не найдена на странице.")
+        return CollectResult(filled=False)
+
+    intro = get_intro_text(page)
+    if intro:
+        click.echo(f"  Вопросы от работодателя ({len(questions)} шт.):")
+
+    pending: list[Question] = []
+
+    for i, q in enumerate(questions, 1):
+        click.echo(f"\n  [{i}/{len(questions)}] {q.text[:100]}")
+        record = answers.find_answer(q.text)
+
+        if record and record.get("answer") is not None and record.get("type") == q.type:
+            try:
+                apply_answer(page, q, record["answer"])
+                answers.touch_used(record["id"])
+                click.echo("    ✓ из памяти")
+                continue
+            except CannotFillError as e:
+                click.echo(f"    ! сохранённый ответ не подошёл: {e}")
+
+        # No usable answer — save as pending and continue parsing the rest.
+        answers.save_pending(q.text, q.type, options=_options_for_storage(q))
+        pending.append(q)
+        click.echo("    ~ сохранён для ответа позже")
+
+    if pending:
+        return CollectResult(filled=False, pending=pending)
+    return CollectResult(filled=True)

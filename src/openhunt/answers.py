@@ -177,6 +177,8 @@ def save_answer(
     question_text: str,
     qtype: QuestionType,
     answer: dict[str, Any],
+    source: str | None = None,
+    options: list[dict] | None = None,
 ) -> dict:
     """Save (or update) an answer for the given question.
 
@@ -198,6 +200,10 @@ def save_answer(
         existing["answer"] = answer
         existing["updated_at"] = now
         existing["used_count"] = int(existing.get("used_count", 0)) + 1
+        if source is not None:
+            existing["source"] = source
+        if options is not None:
+            existing["options"] = options
         record = existing
     else:
         record = {
@@ -210,7 +216,64 @@ def save_answer(
             "updated_at": now,
             "used_count": 1,
         }
+        if source is not None:
+            record["source"] = source
+        if options is not None:
+            record["options"] = options
         questions[qid] = record
+
+    data["version"] = SCHEMA_VERSION
+    _save(data)
+    return record
+
+
+def save_pending(
+    question_text: str,
+    qtype: QuestionType,
+    options: list[dict] | None = None,
+) -> dict:
+    """Save a question without an answer (pending state).
+
+    If a record with the same normalized text already exists AND has an answer,
+    it is not overwritten — the existing answer is more valuable.
+    If it exists as pending, options are updated if the new set is richer.
+    Returns the record (existing or newly created).
+    """
+    data = _load()
+    questions: dict = data.setdefault("questions", {})
+    norm = normalize(question_text)
+    qid = question_id(norm)
+    now = time.time()
+
+    existing = questions.get(qid)
+    if existing:
+        if existing.get("answer") is not None:
+            # Already answered — don't overwrite.
+            return existing
+        # Update pending record: fresher text, richer options.
+        existing["text"] = question_text
+        existing["normalized"] = norm
+        existing["type"] = qtype
+        existing["updated_at"] = now
+        if options is not None:
+            old_opts = existing.get("options") or []
+            if len(options) >= len(old_opts):
+                existing["options"] = options
+        return existing
+
+    record = {
+        "id": qid,
+        "text": question_text,
+        "normalized": norm,
+        "type": qtype,
+        "answer": None,
+        "created_at": now,
+        "updated_at": now,
+        "used_count": 0,
+    }
+    if options is not None:
+        record["options"] = options
+    questions[qid] = record
 
     data["version"] = SCHEMA_VERSION
     _save(data)
@@ -234,6 +297,24 @@ def list_answers() -> list[dict]:
     data = _load()
     questions: dict = data.get("questions", {})
     records = list(questions.values())
+    records.sort(key=lambda r: r.get("updated_at", 0), reverse=True)
+    return records
+
+
+def list_pending() -> list[dict]:
+    """Return all pending (unanswered) question records, oldest first."""
+    data = _load()
+    questions: dict = data.get("questions", {})
+    records = [r for r in questions.values() if r.get("answer") is None]
+    records.sort(key=lambda r: r.get("created_at", 0))
+    return records
+
+
+def list_answered() -> list[dict]:
+    """Return all answered question records, newest first."""
+    data = _load()
+    questions: dict = data.get("questions", {})
+    records = [r for r in questions.values() if r.get("answer") is not None]
     records.sort(key=lambda r: r.get("updated_at", 0), reverse=True)
     return records
 

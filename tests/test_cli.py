@@ -565,3 +565,113 @@ def test_apply_no_excludes(tmp_path, monkeypatch):
     runner.invoke(main, ["resume", "set", "abc123"])
     runner.invoke(main, ["apply", "--query", "python"])
     assert captured["exclude_patterns"] is None
+
+
+# --- questionnaire CLI ---
+
+
+def test_questionnaire_list_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "memory" / "answers.json")
+
+    result = runner.invoke(main, ["questionnaire", "list"])
+    assert result.exit_code == 0
+    assert "0" in result.output
+
+
+def test_questionnaire_list_shows_pending(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "memory" / "answers.json")
+
+    from openhunt.answers import save_answer, save_pending
+
+    save_pending("Pending question?", "text")
+    save_answer("Answered question?", "text", {"text": "yes"})
+
+    result = runner.invoke(main, ["questionnaire", "list", "--pending"])
+    assert result.exit_code == 0
+    assert "Pending question?" in result.output
+    assert "Answered question?" not in result.output
+
+
+def test_questionnaire_list_shows_answered(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "memory" / "answers.json")
+
+    from openhunt.answers import save_answer, save_pending
+
+    save_pending("Pending question?", "text")
+    save_answer("Answered question?", "text", {"text": "yes"})
+
+    result = runner.invoke(main, ["questionnaire", "list", "--answered"])
+    assert result.exit_code == 0
+    assert "Answered question?" in result.output
+    assert "Pending question?" not in result.output
+
+
+def test_questionnaire_clear(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "memory" / "answers.json")
+
+    from openhunt.answers import list_answers, save_answer, save_pending
+
+    save_pending("Q1?", "text")
+    save_answer("Q2?", "text", {"text": "a"})
+
+    result = runner.invoke(main, ["questionnaire", "clear"])
+    assert result.exit_code == 0
+    assert "2" in result.output
+    assert list_answers() == []
+
+
+def test_questionnaire_clear_pending_only(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "memory" / "answers.json")
+
+    from openhunt.answers import list_answered, list_pending, save_answer, save_pending
+
+    save_pending("Pending?", "text")
+    save_answer("Answered?", "text", {"text": "a"})
+
+    result = runner.invoke(main, ["questionnaire", "clear", "--pending-only"])
+    assert result.exit_code == 0
+    assert list_pending() == []
+    assert len(list_answered()) == 1
+
+
+def test_questionnaire_answer_no_pending(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr("openhunt.answers.ANSWERS_PATH", tmp_path / "memory" / "answers.json")
+
+    result = runner.invoke(main, ["questionnaire", "answer"])
+    assert result.exit_code == 0
+    assert "Нет неотвеченных" in result.output
+
+
+def test_apply_questionnaires_auto_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr("openhunt.config.OPENHUNT_DIR", tmp_path)
+    monkeypatch.setattr("openhunt.config.BROWSER_DIR", tmp_path / "browser")
+    monkeypatch.setattr("openhunt.config.CONFIG_PATH", tmp_path / "config.toml")
+
+    captured = {}
+    def fake_apply(**kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("openhunt.browser.actions.apply.apply_to_vacancies", fake_apply)
+
+    runner.invoke(main, ["resume", "set", "abc123"])
+    runner.invoke(main, ["apply", "--query", "python", "--questionnaires", "auto"])
+
+    from openhunt.browser.actions.apply import QuestionnaireStrategy
+    assert captured["questionnaires_strategy"] == QuestionnaireStrategy.AUTO

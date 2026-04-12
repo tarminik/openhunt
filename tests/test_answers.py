@@ -9,10 +9,13 @@ from openhunt.answers import (
     SCHEMA_VERSION,
     delete_answer,
     find_answer,
+    list_answered,
     list_answers,
+    list_pending,
     normalize,
     question_id,
     save_answer,
+    save_pending,
     touch_used,
 )
 
@@ -231,3 +234,112 @@ def test_atomic_write_no_temp_file_left_behind():
     p = _path()
     leftovers = [f.name for f in p.parent.glob(f"{p.name}.tmp.*")]
     assert leftovers == []
+
+
+# --- save_pending ---
+
+
+def test_save_pending_creates_record_without_answer():
+    record = save_pending("Сколько лет опыта?", "text")
+    assert record["answer"] is None
+    assert record["type"] == "text"
+    assert record["used_count"] == 0
+
+
+def test_save_pending_with_options():
+    record = save_pending(
+        "Формат работы?",
+        "single_choice",
+        options=[{"text": "Удаленка"}, {"text": "Офис"}],
+    )
+    assert record["answer"] is None
+    assert record["options"] == [{"text": "Удаленка"}, {"text": "Офис"}]
+
+
+def test_save_pending_does_not_overwrite_existing_answer():
+    save_answer("Q1?", "text", {"text": "hello"})
+    record = save_pending("Q1?", "text")
+    assert record["answer"] == {"text": "hello"}
+
+
+def test_save_pending_updates_options_on_existing_pending():
+    save_pending("Q1?", "single_choice", options=[{"text": "A"}])
+    record = save_pending("Q1?", "single_choice", options=[{"text": "A"}, {"text": "B"}])
+    assert record["options"] == [{"text": "A"}, {"text": "B"}]
+
+
+def test_save_pending_keeps_richer_options():
+    """If existing pending has more options, don't replace with fewer."""
+    save_pending("Q1?", "single_choice", options=[{"text": "A"}, {"text": "B"}, {"text": "C"}])
+    record = save_pending("Q1?", "single_choice", options=[{"text": "A"}])
+    assert len(record.get("options", [])) == 3
+
+
+def test_save_pending_persists():
+    save_pending("Q1?", "text")
+    record = find_answer("Q1?")
+    # find_answer returns records regardless of answer state
+    assert record is not None
+    assert record["answer"] is None
+
+
+# --- list_pending / list_answered ---
+
+
+def test_list_pending_returns_only_unanswered():
+    save_pending("Pending1?", "text")
+    save_pending("Pending2?", "text")
+    save_answer("Answered?", "text", {"text": "yes"})
+    pending = list_pending()
+    assert len(pending) == 2
+    assert all(r["answer"] is None for r in pending)
+
+
+def test_list_pending_oldest_first():
+    save_pending("First?", "text")
+    save_pending("Second?", "text")
+    pending = list_pending()
+    assert pending[0]["text"] == "First?"
+    assert pending[1]["text"] == "Second?"
+
+
+def test_list_answered_returns_only_answered():
+    save_pending("Pending?", "text")
+    save_answer("Answered1?", "text", {"text": "a"})
+    save_answer("Answered2?", "text", {"text": "b"})
+    answered = list_answered()
+    assert len(answered) == 2
+    assert all(r["answer"] is not None for r in answered)
+
+
+def test_list_answered_newest_first():
+    save_answer("First?", "text", {"text": "a"})
+    save_answer("Second?", "text", {"text": "b"})
+    answered = list_answered()
+    assert answered[0]["text"] == "Second?"
+    assert answered[1]["text"] == "First?"
+
+
+# --- source field ---
+
+
+def test_save_answer_with_source():
+    record = save_answer("Q1?", "text", {"text": "hi"}, source="llm")
+    assert record["source"] == "llm"
+
+
+def test_save_answer_with_options():
+    record = save_answer(
+        "Q1?", "single_choice", {"option": "A"},
+        options=[{"text": "A"}, {"text": "B"}],
+    )
+    assert record["options"] == [{"text": "A"}, {"text": "B"}]
+
+
+def test_backward_compat_old_records_without_source():
+    """Old records without 'source' or 'options' fields should still work."""
+    save_answer("Q1?", "text", {"text": "hi"})
+    record = find_answer("Q1?")
+    assert record is not None
+    assert record.get("source") is None
+    assert record.get("options") is None

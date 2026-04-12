@@ -57,13 +57,14 @@ def login() -> None:
 )
 @click.option(
     "--questionnaires",
-    type=click.Choice(["skip", "interactive"], case_sensitive=False),
+    type=click.Choice(["skip", "interactive", "auto"], case_sensitive=False),
     default="skip",
     show_default=True,
     help=(
         "Что делать с вакансиями, требующими ответов на вопросы работодателя: "
-        "skip — пропускать (как раньше); "
-        "interactive — заполнять из памяти, неизвестные вопросы спрашивать у пользователя."
+        "skip — пропускать; "
+        "auto — заполнить из памяти если все ответы есть, иначе сохранить вопросы на потом; "
+        "interactive — заполнять из памяти, неизвестные спрашивать у пользователя (блокирует)."
     ),
 )
 @click.option(
@@ -519,6 +520,135 @@ def codex_status_cmd() -> None:
         click.echo("Токен истёк, будет обновлён автоматически при использовании.")
     else:
         click.echo("Авторизован, токен действителен.")
+
+
+@main.group()
+def questionnaire() -> None:
+    """Управление ответами на вопросы работодателей."""
+
+
+@questionnaire.command("list")
+@click.option("--pending", "filter_mode", flag_value="pending", help="Только неотвеченные.")
+@click.option("--answered", "filter_mode", flag_value="answered", help="Только отвеченные.")
+def questionnaire_list(filter_mode: str | None) -> None:
+    """Показать сохранённые вопросы."""
+    from openhunt.answers import list_answered, list_answers, list_pending
+
+    if filter_mode == "pending":
+        records = list_pending()
+        label = "Неотвеченных"
+    elif filter_mode == "answered":
+        records = list_answered()
+        label = "Отвеченных"
+    else:
+        records = list_answers()
+        label = "Всего"
+
+    if not records:
+        click.echo(f"{label} вопросов: 0")
+        return
+
+    click.echo(f"{label} вопросов: {len(records)}\n")
+    for r in records:
+        status = "✓" if r.get("answer") is not None else "?"
+        source = f" [{r['source']}]" if r.get("source") else ""
+        click.echo(f"  {status} {r['text'][:80]}")
+        click.echo(f"    тип: {r['type']}{source}")
+        opts = r.get("options")
+        if opts:
+            labels = ", ".join(o["text"] for o in opts[:5])
+            if len(opts) > 5:
+                labels += ", ..."
+            click.echo(f"    опции: {labels}")
+        if r.get("answer") is not None:
+            click.echo(f"    ответ: {r['answer']}")
+        if r.get("used_count", 0) > 0:
+            click.echo(f"    использован: {r['used_count']} раз")
+
+
+@questionnaire.command("answer")
+@click.option("--auto-only", is_flag=True, help="Только LLM, не спрашивать пользователя.")
+def questionnaire_answer(auto_only: bool) -> None:
+    """Ответить на неотвеченные вопросы (LLM + пользователь)."""
+    from openhunt.answers import list_pending, save_answer
+    from openhunt.config import get_default_resume, get_llm_config
+
+    pending = list_pending()
+    if not pending:
+        click.echo("Нет неотвеченных вопросов.")
+        return
+
+    click.echo(f"Неотвеченных вопросов: {len(pending)}")
+
+    needs_human = list(pending)
+    auto_answered = 0
+
+    llm_config = get_llm_config()
+    if llm_config:
+        from openhunt.llm import answer_questions
+        from openhunt.memory import get_profile, get_user_name
+
+        resume_id = get_default_resume()
+        profile_text = get_profile(resume_id) if resume_id else ""
+        user_name = get_user_name() or ""
+
+        click.echo("LLM анализирует вопросы...")
+        results = answer_questions(pending, profile_text or "", user_name)
+
+        needs_human = []
+        for r, orig in zip(results, pending):
+            if r.get("answer") is not None and not r.get("needs_human"):
+                save_answer(orig["text"], orig["type"], r["answer"], source="llm")
+                auto_answered += 1
+                click.echo(f"  ✓ LLM: {orig['text'][:60]}")
+            else:
+                needs_human.append(orig)
+
+        click.echo(f"\nLLM ответил на {auto_answered} из {len(pending)} вопросов.")
+    else:
+        click.echo("LLM не настроен, все вопросы для ручного ответа.")
+
+    if auto_only:
+        if needs_human:
+            click.echo(f"Осталось вопросов для ручного ответа: {len(needs_human)}")
+        return
+
+    if not needs_human:
+        click.echo("Все воп��осы отвечены!")
+        return
+
+    click.echo(f"\nВопросов для ручного ответа: {len(needs_human)}")
+
+    from openhunt.browser.actions.questionnaire import ask_offline_answer
+
+    for i, record in enumerate(needs_human, 1):
+        answer = ask_offline_answer(record)
+        save_answer(record["text"], record["type"], answer, source="user")
+        click.echo(f"  [{i}/{len(needs_human)}] Сохранено.")
+
+    click.echo("\nВсе вопросы отвечены!")
+
+
+@questionnaire.command("clear")
+@click.option("--pending-only", is_flag=True, help="Удалить только неотвеченные вопросы.")
+def questionnaire_clear(pending_only: bool) -> None:
+    """Очистить сохранённые вопросы."""
+    from openhunt.answers import delete_answer, list_answers, list_pending
+
+    if pending_only:
+        records = list_pending()
+    else:
+        records = list_answers()
+
+    if not records:
+        click.echo("Нечего удалять.")
+        return
+
+    for r in records:
+        delete_answer(r["id"])
+
+    label = "неотвеченных " if pending_only else ""
+    click.echo(f"Удалено {label}вопросов: {len(records)}")
 
 
 if __name__ == "__main__":

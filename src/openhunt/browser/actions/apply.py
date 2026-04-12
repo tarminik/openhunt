@@ -25,6 +25,7 @@ class QuestionnaireStrategy(StrEnum):
 
     SKIP = "skip"               # current default — skip and report
     INTERACTIVE = "interactive"  # fill via memory, prompt user for unknowns
+    AUTO = "auto"               # fill from memory if all ready, save pending otherwise
 
 
 class ApplyResult(Enum):
@@ -335,6 +336,28 @@ def _try_apply(
             if not filled:
                 # Direct navigation back to the vacancy — page.go_back() is
                 # unreliable on /applicant/vacancy_response (observed timeouts).
+                page.goto(vacancy_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
+                return ApplyResult.QUESTIONNAIRE
+
+            if submit_questionnaire(page):
+                return ApplyResult.APPLIED
+            click.echo("  ! Анкета заполнена, но отправка не подтверждена.")
+            return ApplyResult.ERROR
+
+        if questionnaires_strategy == QuestionnaireStrategy.AUTO:
+            from openhunt.browser.actions.questionnaire import (
+                collect_and_fill,
+                submit_questionnaire,
+            )
+
+            try:
+                result = collect_and_fill(page)
+            except Exception as e:
+                click.echo(f"  ! Ошибка при разборе анкеты: {e}")
+                page.goto(vacancy_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
+                return ApplyResult.QUESTIONNAIRE
+
+            if not result.filled:
                 page.goto(vacancy_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
                 return ApplyResult.QUESTIONNAIRE
 
