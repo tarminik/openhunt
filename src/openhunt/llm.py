@@ -146,8 +146,6 @@ def _generate_via_responses(
         model=model,
         instructions=system_prompt,
         input=[{"role": "user", "content": user_message}],
-        max_output_tokens=1024,
-        temperature=0.7,
         store=False,
         stream=True,
     )
