@@ -92,14 +92,11 @@ def _select_resume_in_popup(page: Page, resume_id: str) -> None:
         human_delay(0.3, 0.6)
         return
 
-    # No resume selector found at all — single-resume account, nothing to do
-    if not select_el and not dialog:
-        return
-
-    click.echo(
-        f"  ! Предупреждение: резюме {resume_id} не найдено в селекторе,"
-        " используется по умолчанию"
-    )
+    if select_el:
+        click.echo(
+            f"  ! Предупреждение: резюме {resume_id} не найдено в списке опций,"
+            " используется по умолчанию"
+        )
 
 
 def _extract_vacancy_info(page: Page) -> tuple[str, str]:
