@@ -436,8 +436,8 @@ def _try_apply(
         )
         return ApplyResult.APPLIED
 
-    # Unknown state
-    page.go_back()
+    # Unknown state — next iteration's page.goto(next_vacancy_url) handles
+    # navigation; page.go_back() is unreliable on hh.ru and hangs until timeout.
     return ApplyResult.ERROR
 
 
